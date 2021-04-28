@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
-import requests
+import requests, re
 rates_cache = {}
 
 def fetch_rates(currency):
@@ -15,15 +15,33 @@ def get_rate(currency, asOfDate):
     rates = fetch_rates(currency)
     asOfDate = asOfDate.date()
     asOfDates = [asOfDate - timedelta(days=i) for i in range(1, 5)]
-    return next(rates[day] for day in asOfDates if day in rates)
+    rate =  next(rates[day] for day in asOfDates if day in rates)
+    return rate
 
 def convert_rate(asOfDate, amount):
     return get_rate('USD', asOfDate) * amount
 
 def convert_sheet(sheet):
-    header = dict([(sheet.cell(0, col_index).value, col_index) for col_index in range(sheet.ncols)])
-    get_row = lambda row: dict([(column, sheet.cell(row, col_index).value) for (column, col_index) in header.items()])
-    return [get_row(idx) for idx in range(1, sheet.nrows)]
+    sheet.calculate_dimension()
+    cols = sheet.max_column
+    rows = sheet.max_row
+    header = [(sheet.cell(row=1, column=col_index).value, col_index) for col_index in range(1, cols + 1)]
+    get_row = lambda row: dict([(column, sheet.cell(row, col_index).value) for (column, col_index) in header])
+    return [get_row(idx) for idx in range(2, rows + 1)]
+
+def sum_dict(d):
+    return sum([v for k,v in d.items()])
+
+def add_working_days(date, d):
+    business_days_to_add = d
+    current_date = date
+    while business_days_to_add > 0:
+        current_date += timedelta(days=1)
+        weekday = current_date.weekday()
+        if weekday >= 5: # sunday = 6
+            continue
+        business_days_to_add -= 1
+    return current_date
 
 def group_by_pos_id(transactions):
     res = {}
