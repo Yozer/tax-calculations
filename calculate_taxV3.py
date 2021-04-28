@@ -103,16 +103,16 @@ def read(path):
         amount = Decimal(str(row['Amount']).replace(',', '.'))
         profit = Decimal(str(row['Profit']).replace(',', '.'))
         units = Decimal(row['Units'].replace(',', '.'))
-        leverage = Decimal("1") if row['Leverage'] == None else Decimal(str(row['Leverage']).replace(',', '.'))
         pos_type = get_position_type(pos_id, grouped_transactions, grouped_closed_positions)
         is_cfd = row["Is Real"] == "CFD"
+        is_sell = row["Action"].startswith("Sell")
+
+        # że niby data przeniesienia wlasnosci to d+2, no chyba nie dla etoro
         # d = 2 if pos_type == "stock" and not is_cfd else 0
         d = 0
         trans = {
             'open_date': add_working_days(datetime.strptime(row['Open Date'], '%d-%m-%Y %H:%M'), d),
             'close_date': add_working_days(datetime.strptime(row['Close Date'], '%d-%m-%Y %H:%M'), d),
-            'open_amount': amount * leverage,
-            'close_amount': amount * leverage,
             'is_cfd': is_cfd,
             'id': pos_id,
             'type': pos_type,
@@ -120,15 +120,27 @@ def read(path):
             'country': get_ticker_country(pos_id, grouped_transactions, grouped_closed_positions)
         }
 
-        if row["Action"].startswith("Sell"):
-            trans["close_amount"] -= profit
-            trans["close_amount"], trans["open_amount"] = trans["open_amount"], trans["close_amount"]
-            trans["open_date"], trans["close_date"] = trans["close_date"], trans["open_date"]
-        else:
-            trans["close_amount"] += profit
+        if is_sell and not is_cfd:
+            raise Exception(f"Not CFD that is sell? Pos id {pos_id}")
 
-        # if trans['close_date'].year != 2020:
-        #     continue
+        if is_cfd:
+            # dla cfd przychodem będzie sprzedaż z zyskiem
+            if profit > Decimal("0"):
+                trans['open_amount'] = Decimal("0")
+                trans['close_amount'] = profit
+            else:
+                # a kosztem strata
+                trans['open_amount'] = -profit
+                trans['close_amount'] = Decimal("0")
+                trans["open_date"], trans["close_date"] = trans["close_date"], trans["open_date"]
+        else:
+            # dla akcji albo krypto przychodem jest cena sprzedaży a kosztem cena kupna
+            trans["open_amount"] = amount
+            trans["close_amount"] = amount + profit
+
+        if trans['close_date'].year != 2020:
+            continue
+
         entries.append(trans)
 
     for row in transactions:
@@ -181,9 +193,12 @@ def process_positions(positions, typ):
             dochod[country] = Decimal("0")
 
         if pos["type"] == "fee":
-            rate_pln = convert_rate(pos["date"], pos["amount"])
-            koszty[country] -= rate_pln
-            dochod[country] += rate_pln
+            if pos["amount"] > 0:
+                raise Exception(f"Positive fee? {pos_id}")
+
+            rate_pln = convert_rate(pos["date"], -pos["amount"])
+            koszty[country] += rate_pln
+            dochod[country] -= rate_pln
         else:
             if pos["status"] == "closed":
                 income_usd[country] += pos["close_amount"] - pos["open_amount"]
