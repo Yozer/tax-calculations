@@ -168,7 +168,7 @@ def read(path):
         elif trans_type == "Open Position":
             if pos_id not in grouped_closed_positions:
                 if row["Details"] in crypto:
-                    print(f"Found krypto that was bought but not sold. Unable to determine CFD. Assuming not. Veryify {pos_id}")
+                    print(f"Found krypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
                 else:
                     continue
                 
