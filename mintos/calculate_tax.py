@@ -33,9 +33,14 @@ def calculate_tax(path):
     workbook = load_workbook(filename=path, read_only=False)
     income = Decimal("0")
 
+    # ten dropdown ze screena może nie być dobry,
+    # minusowe powinny leciec do kosztów a dodatnie do przychodu
+    # i wypluwamy dochód, nie zmienia podatku ale fajniej wylgada
     for currency in ["EUR", "PLN"]:
         sheet = convert_sheet(workbook[currency])
         for row in sheet:
+            if row['Date'] is None:
+                continue
             date = datetime.strptime(row['Date'], '%Y-%m-%d %H:%M:%S')
             amount = convert_to_pln(date, Decimal(str(row["Turnover"])), currency)
             income += amount
