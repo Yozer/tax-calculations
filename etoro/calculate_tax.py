@@ -68,11 +68,23 @@ def process_rollover_fee(transaction, transactions, closed_positions):
         raise Exception(f'Weird row on position id {transaction["Position ID"]}. Closing')
 
     if transaction['Details'] in ['Weekend fee', 'Over night fee']:
-        pos_type = 'fee'
         country = get_ticker_country(pos_id, transactions, closed_positions)
-        if country == CryptoCountry:
-            # 840652308
-            raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
+        if amount < 0:
+            pos_type = 'fee'
+            if country == CryptoCountry:
+                raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
+        else:
+            return {
+                'open_date': date,
+                'close_date': date,
+                'open_amount': Decimal("0"),
+                'close_amount': amount,
+                'is_cfd': True,
+                'id': pos_id,
+                'type': 'stock',
+                'status': 'open',
+                'country': country
+            }
     elif transaction['Details'] == 'Payment caused by dividend':
         if amount > 0:
             country = DividendCountry
@@ -209,7 +221,7 @@ def process_positions(positions, typ):
 
         if pos["type"] == "fee":
             if pos["amount"] > 0:
-                raise Exception(f"Positive fee? {pos_id}")
+                raise Exception(f"Positive fee {pos['amount']} for {pos['id']}")
 
             rate_pln = convert_rate(pos["date"], -pos["amount"])
             koszty[country] += rate_pln
