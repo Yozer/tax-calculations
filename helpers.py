@@ -1,25 +1,25 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
-import requests, re
+import requests
 rates_cache = {}
 
-def fetch_rates(currency):
+def fetch_rates(currency:str, year:int):
     global rates_cache
     if currency not in rates_cache:
-        response = requests.get(f'https://api.nbp.pl/api/exchangerates/rates/A/{currency}/2020-01-01/2020-12-31?format=json').json()
+        response = requests.get(f'https://api.nbp.pl/api/exchangerates/rates/A/{currency}/{year-1}-12-31/{year}-12-31?format=json').json()
         parse_date = lambda x: datetime.strptime(x, '%Y-%m-%d').date()
         rates_cache[currency] = dict([(parse_date(rate['effectiveDate']), Decimal(str(rate['mid']))) for rate in response['rates']])
     return rates_cache[currency]
 
-def get_rate(currency, asOfDate):
-    rates = fetch_rates(currency)
+def get_rate(currency, asOfDate: datetime):
+    rates = fetch_rates(currency, asOfDate.year)
     asOfDate = asOfDate.date()
     asOfDates = [asOfDate - timedelta(days=i) for i in range(1, 5)]
     rate =  next(rates[day] for day in asOfDates if day in rates)
     return rate
 
-def convert_rate(asOfDate, amount):
-    return get_rate('USD', asOfDate) * amount
+def convert_rate(asOfDate, amount, currency='USD'):
+    return amount if currency == 'PLN' else (get_rate(currency, asOfDate) * amount)
 
 def convert_sheet(sheet):
     sheet.calculate_dimension()
@@ -42,13 +42,3 @@ def add_working_days(date, d):
             continue
         business_days_to_add -= 1
     return current_date
-
-def group_by_pos_id(transactions):
-    res = {}
-    for x in transactions:
-        pos_id = x["Position ID"]
-        if pos_id not in res:
-            res[pos_id] = []
-        res[pos_id].append(x)
-
-    return res

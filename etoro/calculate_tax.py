@@ -1,10 +1,11 @@
-import re
+import os, sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+
 from openpyxl import load_workbook
-from datetime import datetime, timedelta
-from itertools import groupby
+from datetime import datetime
 from decimal import Decimal
-from helpers import sum_dict, convert_rate, convert_sheet, group_by_pos_id, add_working_days
 from mapping import get_country_code
+from helpers import sum_dict, convert_rate, convert_sheet
 
 # pos_types: crypto, stock, dividend, fee
 dividends_abroad_tax_rates = {'USA': Decimal("0.15"), 'UK': Decimal("0")}
@@ -21,6 +22,16 @@ unknown_stocks = set()
 CryptoCountry = 'CryptoCountry'
 DividendCountry = 'DividendCountry'
 UnknownCountry = 'Unknown'
+
+def group_by_pos_id(transactions):
+    res = {}
+    for x in transactions:
+        pos_id = x["Position ID"]
+        if pos_id not in res:
+            res[pos_id] = []
+        res[pos_id].append(x)
+
+    return res
 
 def get_position_type(pos_id, transactions, closed_positions):
     if pos_id not in transactions:
@@ -134,12 +145,9 @@ def read(path):
         is_cfd = row["Is Real"] == "CFD"
         is_sell = row["Action"].startswith("Sell")
 
-        # że niby data przeniesienia wlasnosci to d+2, no chyba nie dla etoro
-        # d = 2 if pos_type == "stock" and not is_cfd else 0
-        d = 0
         trans = {
-            'open_date': add_working_days(datetime.strptime(row['Open Date'], '%d-%m-%Y %H:%M'), d),
-            'close_date': add_working_days(datetime.strptime(row['Close Date'], '%d-%m-%Y %H:%M'), d),
+            'open_date': datetime.strptime(row['Open Date'], '%d-%m-%Y %H:%M'),
+            'close_date': datetime.strptime(row['Close Date'], '%d-%m-%Y %H:%M'),
             'is_cfd': is_cfd,
             'id': pos_id,
             'type': pos_type,
@@ -185,8 +193,8 @@ def read(path):
                     continue
                 
                 trans = {
-                    'open_date': add_working_days(datetime.strptime(row['Date'], '%Y-%m-%d %H:%M:%S'), d),
-                    'close_date': add_working_days(datetime.strptime(row['Date'], '%Y-%m-%d %H:%M:%S'), d),
+                    'open_date': datetime.strptime(row['Date'], '%Y-%m-%d %H:%M:%S'),
+                    'close_date': datetime.strptime(row['Date'], '%Y-%m-%d %H:%M:%S'),
                     'open_amount': Decimal(str(row["Amount"])),
                     'close_amount': Decimal("0"),
                     'is_cfd': False,
@@ -279,8 +287,7 @@ def process_dividends(incomes, dividend_taxes):
     podatek_zaplacony_dywidendy = round(podatek_zaplacony_dywidendy)
     return (income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy)
 
-fname = 'statement_2020.xlsx'
-# fname = 'statement_2020 - bug.xlsx'
+fname = 'statement_2021.xlsx'
 entries = read(fname)
 dividend_taxes = read_dividend_taxes(fname)
 income_stock_usd, przychod_stock, koszty_stock, dochod_stock = process_positions(entries, 'stock')
