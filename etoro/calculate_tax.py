@@ -22,6 +22,7 @@ unknown_stocks = set()
 CryptoCountry = 'CryptoCountry'
 DividendCountry = 'DividendCountry'
 UnknownCountry = 'Unknown'
+excel_date_format = '%d/%m/%Y %H:%M:%S'
 
 def group_by_pos_id(transactions):
     res = {}
@@ -39,19 +40,12 @@ def get_position_type(pos_id, transactions, closed_positions):
 
     first_transaction = transactions[pos_id][0] # we might have different types
     stock_name = first_transaction['Details']
-    is_cfd = closed_positions[pos_id][0]["Is Real"] == "CFD"
+    is_cfd = closed_positions[pos_id][0]["Type"] == "CFD"
     pos_type = "crypto" if stock_name in crypto and not is_cfd else "stock"
     if pos_type == "crypto":
         traded_cryptos.add(stock_name)
 
     return pos_type
-
-def get_exchange_country(stock, name, pos_id):
-    return get_country_code(name, stock, pos_id)
-
-def get_stock_country(stock, name, pos_id):
-    # yep, doesn't work too well
-    return get_country_code(name, stock, pos_id, by_stock=True)
 
 def get_ticker_country(pos_id, transactions, closed_positions):
     if pos_id not in transactions:
@@ -59,7 +53,7 @@ def get_ticker_country(pos_id, transactions, closed_positions):
     
     stock = transactions[pos_id][0]["Details"]
     closed_position = closed_positions[pos_id][0]
-    is_cfd = closed_position["Is Real"] == "CFD"
+    is_cfd = closed_position["Type"] == "CFD"
     if is_cfd:
         return "Cypr"
 
@@ -67,7 +61,7 @@ def get_ticker_country(pos_id, transactions, closed_positions):
     if pos_type == "crypto":
         return CryptoCountry
     
-    return get_exchange_country(stock, closed_position["Action"], pos_id)
+    return get_country_code(closed_position["Action"], stock, closed_position['ISIN'], pos_id)
 
 def process_rollover_fee(transaction, transactions, closed_positions):
     amount = Decimal(str(transaction["Amount"]))
@@ -113,22 +107,22 @@ def process_rollover_fee(transaction, transactions, closed_positions):
 
 def read_dividend_taxes(path):
     workbook = load_workbook(filename=path)
-    sheet = convert_sheet(workbook['Dywidendy'])
+    sheet = convert_sheet(workbook['Dividends'])
     dividend_taxes = {}
     for x in sheet:
         pos_id = str(x["Position ID"])
         if pos_id not in dividend_taxes:
             dividend_taxes[pos_id] = []
 
-        x["Tax percentage"] = Decimal(str(x["Tax percentage"].replace('%', ''))) / Decimal("100")
-        x["Net Dividend Paid"] = Decimal(str(x["Net Dividend Paid"]))
+        x["Withholding Tax Rate (%)"] = Decimal(str(x["Withholding Tax Rate (%)"].replace('%', ''))) / Decimal("100")
+        x["Net Dividend Received (USD)"] = Decimal(str(x["Net Dividend Received (USD)"]))
         dividend_taxes[pos_id] += [x]
 
     return dividend_taxes
 
 def read(path):
     workbook = load_workbook(filename=path)
-    transactions = convert_sheet(workbook['Transactions Report'])
+    transactions = convert_sheet(workbook['Account Activity'])
     grouped_transactions = group_by_pos_id(transactions)
     closed_positions = convert_sheet(workbook['Closed Positions'])
     grouped_closed_positions = group_by_pos_id(closed_positions)
@@ -140,14 +134,13 @@ def read(path):
             continue
         amount = Decimal(str(row['Amount']).replace(',', '.'))
         profit = Decimal(str(row['Profit']).replace(',', '.'))
-        units = Decimal(row['Units'].replace(',', '.'))
         pos_type = get_position_type(pos_id, grouped_transactions, grouped_closed_positions)
-        is_cfd = row["Is Real"] == "CFD"
+        is_cfd = row["Type"] == "CFD"
         is_sell = row["Action"].startswith("Sell")
 
         trans = {
-            'open_date': datetime.strptime(row['Open Date'], '%d-%m-%Y %H:%M'),
-            'close_date': datetime.strptime(row['Close Date'], '%d-%m-%Y %H:%M'),
+            'open_date': datetime.strptime(row['Open Date'], excel_date_format),
+            'close_date': datetime.strptime(row['Close Date'], excel_date_format),
             'is_cfd': is_cfd,
             'id': pos_id,
             'type': pos_type,
@@ -247,7 +240,7 @@ def process_positions(positions, typ):
 
 def process_dividends(incomes, dividend_taxes):
     dividends = [x for x in incomes if x["type"] == 'dividend']
-    sum_from_dividend_taxes = sum([item["Net Dividend Paid"] for sublist in dividend_taxes.values() for item in sublist])
+    sum_from_dividend_taxes = sum([item["Net Dividend Received (USD)"] for sublist in dividend_taxes.values() for item in sublist])
     income_dividends_usd = Decimal("0")
     income_dividends_usd_brutto = Decimal("0")
     przychod_dywidendy = Decimal("0")
@@ -262,11 +255,11 @@ def process_dividends(incomes, dividend_taxes):
         if len(dividend_taxes[pos_id]) == 0:
             del dividend_taxes[pos_id]
 
-        country = dividend_tax["Country"]
+        country = get_country_code(dividend_tax["Instrument Name"], None, dividend_tax["ISIN"], dividend_tax["Position ID"])
         if country not in dividends_abroad_tax_rates:
             raise Exception(f'Unkown source tax {country} for dividend: {dividend["id"]}')
         
-        total_usd /= Decimal("1") - dividend_tax["Tax percentage"]
+        total_usd /= Decimal("1") - dividend_tax["Withholding Tax Rate (%)"]
         income_dividends_usd_brutto += total_usd
 
         total_pln = convert_rate(dividend["date"], total_usd)
