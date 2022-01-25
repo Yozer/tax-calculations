@@ -11,19 +11,21 @@ def get_country_code(stock_name, stock_symbol, isin_code, pos_id):
     load_instruments()
 
     matched = None
-    stock_symbol = stock_symbol.lower().split('/')[0]
-    stock_name = stock_name.lower().replace("buy ", "").replace("sell ", "")
+    stock_symbol = None if stock_symbol is None else stock_symbol.lower().split('/')[0]
+    stock_name = None if stock_name is None else stock_name.lower().replace("buy ", "").replace("sell ", "")
+    isin_code = None if isin_code is None else isin_code.lower()
 
-    if isin_code in instruments_by_isin:
+    if isin_code is not None and isin_code in instruments_by_isin:
         matched = instruments_by_isin[isin_code]
-    elif stock_symbol in instruments_by_full_symbol:
+    elif stock_symbol is not None and stock_symbol in instruments_by_full_symbol:
         matched = instruments_by_full_symbol[stock_symbol]
-    elif stock_symbol in instruments_by_symbol:
+    elif stock_symbol is not None and stock_symbol in instruments_by_symbol:
         matched = instruments_by_symbol[stock_symbol]
-    elif stock_name in instruments_by_display_name:
+    elif stock_name is not None and stock_name in instruments_by_display_name:
         matched = instruments_by_display_name[stock_name]
 
     if matched is None:
+        return mapping['nasdaq']
         raise Exception(f'Unknown country for pos {pos_id} {stock_name}')
     if len(matched) > 1:
         raise Exception(f'More than one country for pos {pos_id} {stock_name}')

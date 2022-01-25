@@ -8,7 +8,7 @@ from mapping import get_country_code
 from helpers import sum_dict, convert_rate, convert_sheet
 
 # pos_types: crypto, stock, dividend, fee
-dividends_abroad_tax_rates = {'USA': Decimal("0.15"), 'UK': Decimal("0")}
+dividends_abroad_tax_rates = {'USA': Decimal("0.15"), 'Wielka Brytania': Decimal("0")}
 tax_rate = Decimal("0.19")
 crypto = set(["BTC/USD", "ETH/USD", "BCH/USD", "XRP/USD", "DASH/USD", "LTC/USD", "ETC/USD", "ADA/USD", "IOTA/USD", "MIOTA/USD", "XLM/USD", "EOS/USD", "NEO/USD", "TRX/USD", "ZEC/USD", "BNB/USD", "XTZ/USD"])
 ignored_transactions = ['Deposit', 
@@ -22,6 +22,7 @@ unknown_stocks = set()
 CryptoCountry = 'CryptoCountry'
 DividendCountry = 'DividendCountry'
 UnknownCountry = 'Unknown'
+cfd_country = 'Cypr'
 excel_date_format = '%d/%m/%Y %H:%M:%S'
 
 def group_by_pos_id(transactions):
@@ -55,7 +56,7 @@ def get_ticker_country(pos_id, transactions, closed_positions):
     closed_position = closed_positions[pos_id][0]
     is_cfd = closed_position["Type"] == "CFD"
     if is_cfd:
-        return "Cypr"
+        return cfd_country
 
     pos_type = get_position_type(pos_id, transactions, closed_positions)
     if pos_type == "crypto":
@@ -66,13 +67,14 @@ def get_ticker_country(pos_id, transactions, closed_positions):
 def process_rollover_fee(transaction, transactions, closed_positions):
     amount = Decimal(str(transaction["Amount"]))
     pos_id = transaction["Position ID"]
-    date = datetime.strptime(transaction['Date'], '%Y-%m-%d %H:%M:%S')
+    date = datetime.strptime(transaction['Date'], excel_date_format)
     equity_change = Decimal(str(transaction['Realized Equity Change']))
 
     if amount != equity_change:
         raise Exception(f'Weird row on position id {transaction["Position ID"]}. Closing')
 
-    if transaction['Details'] in ['Weekend fee', 'Over night fee']:
+    transaction_type = transaction['Details'].lower()
+    if transaction_type in ['weekend fee', 'over night fee']:
         country = get_ticker_country(pos_id, transactions, closed_positions)
         if amount < 0:
             pos_type = 'fee'
@@ -90,7 +92,7 @@ def process_rollover_fee(transaction, transactions, closed_positions):
                 'status': 'open',
                 'country': country
             }
-    elif transaction['Details'] == 'Payment caused by dividend':
+    elif transaction_type == 'payment caused by dividend':
         if amount > 0:
             country = DividendCountry
             pos_type = 'dividend'
@@ -101,7 +103,7 @@ def process_rollover_fee(transaction, transactions, closed_positions):
             if country == CryptoCountry:
                 raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
     else:
-        raise Exception(f"Unkown fee {row['Details']} for position {row['Position ID']}")
+        raise Exception(f"Unkown fee {transaction_type} for position {transaction['Position ID']}")
 
     return ({'id': pos_id, 'date': date, 'amount': amount, 'country': country, "type": pos_type})
 
@@ -160,14 +162,12 @@ def read(path):
                 # a kosztem strata
                 trans['open_amount'] = -profit
                 trans['close_amount'] = Decimal("0")
+                # co jesli otworzony cfd byl w 2020 a zamkniety w 2021?
                 trans["open_date"], trans["close_date"] = trans["close_date"], trans["open_date"]
         else:
             # dla akcji albo krypto przychodem jest cena sprzedaży a kosztem cena kupna
             trans["open_amount"] = amount
             trans["close_amount"] = amount + profit
-
-        if trans['close_date'].year != 2020:
-            continue
 
         entries.append(trans)
 
@@ -186,8 +186,8 @@ def read(path):
                     continue
                 
                 trans = {
-                    'open_date': datetime.strptime(row['Date'], '%Y-%m-%d %H:%M:%S'),
-                    'close_date': datetime.strptime(row['Date'], '%Y-%m-%d %H:%M:%S'),
+                    'open_date': datetime.strptime(row['Date'], excel_date_format),
+                    'close_date': datetime.strptime(row['Date'], excel_date_format),
                     'open_amount': Decimal(str(row["Amount"])),
                     'close_amount': Decimal("0"),
                     'is_cfd': False,
@@ -256,6 +256,7 @@ def process_dividends(incomes, dividend_taxes):
             del dividend_taxes[pos_id]
 
         country = get_country_code(dividend_tax["Instrument Name"], None, dividend_tax["ISIN"], dividend_tax["Position ID"])
+        country = cfd_country if country == 'cfd' else country
         if country not in dividends_abroad_tax_rates:
             raise Exception(f'Unkown source tax {country} for dividend: {dividend["id"]}')
         

@@ -5,11 +5,14 @@ rates_cache = {}
 
 def fetch_rates(currency:str, year:int):
     global rates_cache
-    if currency not in rates_cache:
+    if year not in rates_cache:
+        rates_cache[year] = {}
+
+    if currency not in rates_cache[year]:
         response = requests.get(f'https://api.nbp.pl/api/exchangerates/rates/A/{currency}/{year-1}-12-31/{year}-12-31?format=json').json()
         parse_date = lambda x: datetime.strptime(x, '%Y-%m-%d').date()
-        rates_cache[currency] = dict([(parse_date(rate['effectiveDate']), Decimal(str(rate['mid']))) for rate in response['rates']])
-    return rates_cache[currency]
+        rates_cache[year][currency] = dict([(parse_date(rate['effectiveDate']), Decimal(str(rate['mid']))) for rate in response['rates']])
+    return rates_cache[year][currency]
 
 def get_rate(currency, asOfDate: datetime):
     rates = fetch_rates(currency, asOfDate.year)
