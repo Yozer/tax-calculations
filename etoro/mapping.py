@@ -17,21 +17,35 @@ def get_country_code(stock_name, stock_symbol, isin_code, pos_id):
 
     if isin_code is not None and isin_code in instruments_by_isin:
         matched = instruments_by_isin[isin_code]
-    elif stock_symbol is not None and stock_symbol in instruments_by_full_symbol:
+    if (matched is None or len(matched) > 1) and stock_symbol is not None and stock_symbol in instruments_by_full_symbol:
         matched = instruments_by_full_symbol[stock_symbol]
-    elif stock_symbol is not None and stock_symbol in instruments_by_symbol:
+    if (matched is None or len(matched) > 1) and stock_symbol is not None and stock_symbol in instruments_by_symbol:
         matched = instruments_by_symbol[stock_symbol]
-    elif stock_name is not None and stock_name in instruments_by_display_name:
+    if (matched is None or len(matched) > 1) and stock_name is not None and stock_name in instruments_by_display_name:
         matched = instruments_by_display_name[stock_name]
 
     if matched is None:
-        return mapping['nasdaq']
         raise Exception(f'Unknown country for pos {pos_id} {stock_name}')
-    if len(matched) > 1:
+
+    countries = set(map(get_country_code_from_match, matched))
+    if len(countries) > 1:
         raise Exception(f'More than one country for pos {pos_id} {stock_name}')
     
-    exchange = matched[0]['Exchange'].lower()
-    return exchange if exchange not in mapping else mapping[exchange]
+    return countries.pop()
+
+def get_country_code_from_match(match):
+    countryCode = None if match['ISINCountryCode'] is None else match['ISINCountryCode'].lower().strip()
+
+    if countryCode in country_mapping:
+        return country_mapping[countryCode]
+    elif countryCode not in [None, '', 'null']:
+        raise Exception(f'Missing country {countryCode}')
+    
+    exchange = None if match['Exchange'] is None else match['Exchange'].lower().strip()
+    if exchange in mapping:
+        return mapping[exchange]
+
+    raise Exception(f'Missing mapping for {exchange}')
         
 def load_instruments():
     global instruments_by_symbol
@@ -59,10 +73,33 @@ def create_dict(a, keyFunc):
     
     return result
 
+country_mapping = {
+    'us': 'USA',
+    'se': 'Szwecja',
+    'fr': 'Francja',
+    'gg': 'Guernsey (Wielka Brytania jak nie ma w formularzu)',
+    'gb': 'Wielka Brytania',
+    'ca': 'Kanada',
+    'de': 'Niemcy',
+    'lu': 'Luksemburg',
+    'es': 'Hiszpania',
+    'chf': 'Szwajcaria',
+    'ch': 'Szwajcaria',
+    'il': 'Izrael',
+    'ky': 'Kajmany',
+    'nl': 'Holandia',
+    'cn': 'Chiny'
+}
+
 mapping = {
+    'fx': 'Cypr',
+    'commodity': 'Cypr',
+    'digital currency': 'Crypto',
+
     'nsdq': 'USA',
     'nasdaq': 'USA',
     'nyse': 'USA',
+
     'hong kong exchanges': 'Hong Kong',
     'lse': 'Wielka Brytania',
     'six': 'Szwajcaria',
