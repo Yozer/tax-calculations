@@ -4,25 +4,19 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from openpyxl import load_workbook
 from datetime import datetime
 from decimal import Decimal
-from mapping import get_country_code
+from mapping import get_country_code, CryptoCountry, CfdCountry
 from helpers import sum_dict, convert_rate, convert_sheet
 
 # pos_types: crypto, stock, dividend, fee
 dividends_abroad_tax_rates = {'USA': Decimal("0.15"), 'Wielka Brytania': Decimal("0")}
 tax_rate = Decimal("0.19")
-crypto = set(["BTC/USD", "ETH/USD", "BCH/USD", "XRP/USD", "DASH/USD", "LTC/USD", "ETC/USD", "ADA/USD", "IOTA/USD", "MIOTA/USD", "XLM/USD", "EOS/USD", "NEO/USD", "TRX/USD", "ZEC/USD", "BNB/USD", "XTZ/USD"])
 ignored_transactions = ['Deposit', 
                         'Start Copy', 
                         'Account balance to mirror', 
                         'Mirror balance to account',
                         'Stop Copy',
                         'Edit Stop Loss']
-traded_cryptos = set()
 unknown_stocks = set()
-CryptoCountry = 'CryptoCountry'
-DividendCountry = 'DividendCountry'
-UnknownCountry = 'Unknown'
-cfd_country = 'Cypr'
 excel_date_format = '%d/%m/%Y %H:%M:%S'
 
 def group_by_pos_id(transactions):
@@ -35,34 +29,30 @@ def group_by_pos_id(transactions):
 
     return res
 
-def get_position_type(pos_id, transactions, closed_positions):
+def get_country_raw(pos_id, transactions, closed_positions):
     if pos_id not in transactions:
         raise Exception(f'Logic error. Unable to find position {pos_id} in transactions sheet')
 
-    first_transaction = transactions[pos_id][0] # we might have different types
+    first_transaction = next(t for t in transactions[pos_id] if t['Details'].lower() != 'payment caused by dividend')
+    closed_position = closed_positions[pos_id][0]
     stock_name = first_transaction['Details']
-    is_cfd = closed_positions[pos_id][0]["Type"] == "CFD"
-    pos_type = "crypto" if stock_name in crypto and not is_cfd else "stock"
-    if pos_type == "crypto":
-        traded_cryptos.add(stock_name)
 
-    return pos_type
+    return get_country_code(closed_position["Action"], stock_name, closed_position['ISIN'])
 
-def get_ticker_country(pos_id, transactions, closed_positions):
-    if pos_id not in transactions:
-        raise Exception(f'Logic error. Unable to find position {pos_id} in transactions sheet')
-    
-    stock = transactions[pos_id][0]["Details"]
+def get_position_type(pos_id, transactions, closed_positions):
     closed_position = closed_positions[pos_id][0]
     is_cfd = closed_position["Type"] == "CFD"
-    if is_cfd:
-        return cfd_country
 
-    pos_type = get_position_type(pos_id, transactions, closed_positions)
-    if pos_type == "crypto":
-        return CryptoCountry
-    
-    return get_country_code(closed_position["Action"], stock, closed_position['ISIN'], pos_id)
+    country= get_country_raw(pos_id, transactions, closed_positions)
+    return "crypto" if country == CryptoCountry and not is_cfd else "stock"
+
+def get_ticker_country(pos_id, transactions, closed_positions):
+    closed_position = closed_positions[pos_id][0]
+    is_cfd = closed_position["Type"] == "CFD"
+    if is_cfd: #is it ok?
+        return CfdCountry
+
+    return get_country_raw(pos_id, transactions, closed_positions)
 
 def process_rollover_fee(transaction, transactions, closed_positions):
     amount = Decimal(str(transaction["Amount"]))
@@ -94,14 +84,15 @@ def process_rollover_fee(transaction, transactions, closed_positions):
             }
     elif transaction_type == 'payment caused by dividend':
         if amount > 0:
-            country = DividendCountry
             pos_type = 'dividend'
+            country = None
         else:
             # ujemne dywidendy traktujemy jako koszt
+            if get_country_raw(pos_id, transactions, closed_positions) == CryptoCountry:
+                raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
+
             pos_type = 'fee'
             country = get_ticker_country(pos_id, transactions, closed_positions)
-            if country == CryptoCountry:
-                raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
     else:
         raise Exception(f"Unkown fee {transaction_type} for position {transaction['Position ID']}")
 
@@ -179,11 +170,8 @@ def read(path):
         if trans_type == 'Rollover Fee':
             entries.append(process_rollover_fee(row, grouped_transactions, grouped_closed_positions))
         elif trans_type == "Open Position":
-            if pos_id not in grouped_closed_positions:
-                if row["Details"] in crypto:
-                    print(f"Found krypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
-                else:
-                    continue
+            if pos_id not in grouped_closed_positions and get_country_code(None, row["Details"], None, throw=False) == CryptoCountry:
+                print(f"Found krypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
                 
                 trans = {
                     'open_date': datetime.strptime(row['Date'], excel_date_format),
@@ -255,8 +243,7 @@ def process_dividends(incomes, dividend_taxes):
         if len(dividend_taxes[pos_id]) == 0:
             del dividend_taxes[pos_id]
 
-        country = get_country_code(dividend_tax["Instrument Name"], None, dividend_tax["ISIN"], dividend_tax["Position ID"])
-        country = cfd_country if country == 'cfd' else country
+        country = get_country_code(dividend_tax["Instrument Name"], None, dividend_tax["ISIN"])
         if country not in dividends_abroad_tax_rates:
             raise Exception(f'Unkown source tax {country} for dividend: {dividend["id"]}')
         
@@ -297,7 +284,6 @@ if len(unknown_stocks) > 0:
 
 income_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto = process_positions(entries, 'crypto')
 print()
-print(f"Cryptos: {list(traded_cryptos)}")
 print(f"Dochód $ za crypto: ${sum_dict(income_crypto_usd)}")
 print(f"Przychód w pln za crypto: {sum_dict(przychod_crypto)} zł")
 print(f"Koszt w pln za crypto: {sum_dict(koszty_crypto)} zł")

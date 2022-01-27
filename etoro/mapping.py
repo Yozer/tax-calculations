@@ -1,13 +1,15 @@
 from openpyxl import load_workbook
 from helpers import convert_sheet
 
+CryptoCountry = 'CryptoCountry'
+CfdCountry = 'Cypr'
 instruments_fname = 'instruments.xlsx'
 instruments_by_symbol = None
 instruments_by_full_symbol = None
 instruments_by_display_name = None
 instruments_by_isin = None
 
-def get_country_code(stock_name, stock_symbol, isin_code, pos_id):
+def get_country_code(stock_name, stock_symbol, isin_code, throw=True):
     load_instruments()
 
     matched = None
@@ -25,11 +27,14 @@ def get_country_code(stock_name, stock_symbol, isin_code, pos_id):
         matched = instruments_by_display_name[stock_name]
 
     if matched is None:
-        raise Exception(f'Unknown country for pos {pos_id} {stock_name}')
+        if throw:
+            raise Exception(f'Unknown country for isin {isin_code} {stock_name}')
+        else:
+            return None
 
     countries = set(map(get_country_code_from_match, matched))
     if len(countries) > 1:
-        raise Exception(f'More than one country for pos {pos_id} {stock_name}')
+        raise Exception(f'More than one country for isin {isin_code} {stock_name}')
     
     return countries.pop()
 
@@ -77,7 +82,8 @@ country_mapping = {
     'us': 'USA',
     'se': 'Szwecja',
     'fr': 'Francja',
-    'gg': 'Guernsey (Wielka Brytania jak nie ma w formularzu)',
+    'gg': 'Guernsey (GB jak nie ma w formularzu)',
+    'je': 'Jersey  (GB jak nie ma w formularzu)',
     'gb': 'Wielka Brytania',
     'ca': 'Kanada',
     'de': 'Niemcy',
@@ -88,13 +94,15 @@ country_mapping = {
     'il': 'Izrael',
     'ky': 'Kajmany',
     'nl': 'Holandia',
-    'cn': 'Chiny'
+    'cn': 'Chiny',
+    'no': 'Norwegia',
+    'ie': 'Irlandia'
 }
 
 mapping = {
-    'fx': 'Cypr',
-    'commodity': 'Cypr',
-    'digital currency': 'Crypto',
+    'fx': CfdCountry,
+    'commodity': CfdCountry,
+    'digital currency': 'CryptoCountry',
 
     'nsdq': 'USA',
     'nasdaq': 'USA',
@@ -105,5 +113,7 @@ mapping = {
     'six': 'Szwajcaria',
     'bolsa de madrid': 'Hiszpania',
     'euronext paris': 'Francja',
-    'fra': 'Niemcy'
+    'fra': 'Niemcy',
+    'cse': 'Kanada',
+    'hel': 'Finlandia'
 }
