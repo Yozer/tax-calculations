@@ -8,7 +8,7 @@ from mapping import get_country_code, CryptoCountry, CfdCountry
 from helpers import sum_dict, convert_rate, convert_sheet
 
 # pos_types: crypto, stock, dividend, fee
-dividends_abroad_tax_rates = {'USA': Decimal("0.15"), 'Wielka Brytania': Decimal("0")}
+dividends_abroad_tax_rates = {'USA': Decimal("0.15")}
 tax_rate = Decimal("0.19")
 ignored_transactions = ['Deposit', 
                         'Start Copy', 
@@ -16,7 +16,6 @@ ignored_transactions = ['Deposit',
                         'Mirror balance to account',
                         'Stop Copy',
                         'Edit Stop Loss']
-unknown_stocks = set()
 excel_date_format = '%d/%m/%Y %H:%M:%S'
 
 def group_by_pos_id(transactions):
@@ -33,6 +32,9 @@ def get_country_raw(pos_id, transactions, closed_positions):
     if pos_id not in transactions:
         raise Exception(f'Logic error. Unable to find position {pos_id} in transactions sheet')
 
+    all_dividends = all(t['Details'].lower() == 'payment caused by dividend' for t in transactions[pos_id])
+    if all_dividends:
+        return ''
     first_transaction = next(t for t in transactions[pos_id] if t['Details'].lower() != 'payment caused by dividend')
     closed_position = closed_positions[pos_id][0]
     stock_name = first_transaction['Details']
@@ -104,11 +106,15 @@ def read_dividend_taxes(path):
     dividend_taxes = {}
     for x in sheet:
         pos_id = str(x["Position ID"])
+        if x["Position ID"] is None:
+            continue
         if pos_id not in dividend_taxes:
             dividend_taxes[pos_id] = []
 
         x["Withholding Tax Rate (%)"] = Decimal(str(x["Withholding Tax Rate (%)"].replace('%', ''))) / Decimal("100")
         x["Net Dividend Received (USD)"] = Decimal(str(x["Net Dividend Received (USD)"]))
+        x["Withholding Tax Amount (USD)"] = Decimal(str(x["Withholding Tax Amount (USD)"]))
+        x["Date of Payment"] = datetime.strptime(str(x["Date of Payment"]), excel_date_format)
         dividend_taxes[pos_id] += [x]
 
     return dividend_taxes
@@ -229,7 +235,9 @@ def process_positions(positions, typ):
 def process_dividends(incomes, dividend_taxes):
     dividends = [x for x in incomes if x["type"] == 'dividend']
     sum_from_dividend_taxes = sum([item["Net Dividend Received (USD)"] for sublist in dividend_taxes.values() for item in sublist])
+
     income_dividends_usd = Decimal("0")
+    income_dividends_usd2 = Decimal("0")
     income_dividends_usd_brutto = Decimal("0")
     przychod_dywidendy = Decimal("0")
     podatek_nalezny_dywidendy = Decimal("0")
@@ -239,24 +247,34 @@ def process_dividends(incomes, dividend_taxes):
         pos_id = dividend["id"]
         total_usd = dividend["amount"]
         income_dividends_usd += total_usd
-        dividend_tax = dividend_taxes[pos_id].pop()
+
+        dividend_tax = next((x for x in dividend_taxes[pos_id] if x["Net Dividend Received (USD)"] == total_usd and x["Date of Payment"] == dividend["date"]), None)
+        if dividend_tax is None:
+            raise Exception(f"Unable to match dividend for {pos_id} amount {total_usd} on {dividend['date']}")
+
+        dividend_taxes[pos_id].remove(dividend_tax)
         if len(dividend_taxes[pos_id]) == 0:
             del dividend_taxes[pos_id]
 
+        income_dividends_usd2 += dividend_tax["Net Dividend Received (USD)"]
         country = get_country_code(dividend_tax["Instrument Name"], None, dividend_tax["ISIN"])
-        if country not in dividends_abroad_tax_rates:
-            raise Exception(f'Unkown source tax {country} for dividend: {dividend["id"]}')
-        
-        total_usd /= Decimal("1") - dividend_tax["Withholding Tax Rate (%)"]
+        force_witholding_tax_rate = dividends_abroad_tax_rates["USA"] if country == "USA" else dividend_tax["Withholding Tax Rate (%)"]
+        total_usd = dividend_tax["Withholding Tax Amount (USD)"] + dividend_tax["Net Dividend Received (USD)"]
         income_dividends_usd_brutto += total_usd
 
         total_pln = convert_rate(dividend["date"], total_usd)
         przychod_dywidendy += total_pln
-        podatek_zaplacony_dywidendy += dividends_abroad_tax_rates[country] * total_pln
+        podatek_zaplacony_dywidendy += force_witholding_tax_rate * total_pln
+
+        if tax_rate - force_witholding_tax_rate > 0:
+            podatek_nalezny_dywidendy += tax_rate * total_pln
+        else:
+            podatek_nalezny_dywidendy += force_witholding_tax_rate * total_pln
 
     # validate
     if sum_from_dividend_taxes != income_dividends_usd:
-        raise Exception("Suma dywidend między Dywidendy i Transaction Report się nie zgadza")
+        duplicated_pos_ids = "\r\n".join(dividend_taxes.keys())
+        raise Exception("Suma dywidend między Dywidendy i Transaction Report się nie zgadza: " + duplicated_pos_ids)
     if len(dividend_taxes) != 0:
         raise Exception("Niewykorzystano wszystkich dywidend do rozdzielenia podatku!")
 
@@ -264,7 +282,7 @@ def process_dividends(incomes, dividend_taxes):
     income_dividends_usd_brutto = round(income_dividends_usd_brutto, 4)
     przychod_dywidendy = round(przychod_dywidendy, 4)
     podstawa_dywidendy = round(przychod_dywidendy)
-    podatek_nalezny_dywidendy = round(podstawa_dywidendy * tax_rate)
+    podatek_nalezny_dywidendy = round(podatek_nalezny_dywidendy)
     podatek_zaplacony_dywidendy = round(podatek_zaplacony_dywidendy)
     return (income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy)
 
@@ -278,9 +296,6 @@ print(f"Przychód w pln za stocks: {sum_dict(przychod_stock)} zł")
 print(f"Koszt w pln za stocks: {sum_dict(koszty_stock)} zł")
 print(f"Dochód w pln za stocks: {sum_dict(dochod_stock)} zł")
 print(f'Dochód per kraj (na PIT/ZG wpisujemy tylko dodatnie): {dict([(x, str(y)) for x, y in dochod_stock.items()])}')
-
-if len(unknown_stocks) > 0:
-    print(f'Unkown stocks: {unknown_stocks}')
 
 income_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto = process_positions(entries, 'crypto')
 print()

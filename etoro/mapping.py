@@ -96,13 +96,14 @@ country_mapping = {
     'nl': 'Holandia',
     'cn': 'Chiny',
     'no': 'Norwegia',
-    'ie': 'Irlandia'
+    'ie': 'Irlandia',
+    'hk': 'Hong Kong'
 }
 
 mapping = {
     'fx': CfdCountry,
     'commodity': CfdCountry,
-    'digital currency': 'CryptoCountry',
+    'digital currency': CryptoCountry,
 
     'nsdq': 'USA',
     'nasdaq': 'USA',
