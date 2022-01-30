@@ -3,7 +3,8 @@ from decimal import Decimal
 from dateutil import tz
 import requests
 
-warsaw_timezone = to_zone = tz.gettz('Europe/Warsaw')
+warsaw_timezone = tz.gettz('Europe/Warsaw')
+fiat_currencies = ['EUR', 'USD', 'GBP']
 rates_cache = {}
 
 def fetch_rates(currency:str, year:int):
