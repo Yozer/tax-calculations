@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
+from dateutil import tz
 import requests
+
+warsaw_timezone = to_zone = tz.gettz('Europe/Warsaw')
 rates_cache = {}
 
 def fetch_rates(currency:str, year:int):
@@ -21,7 +24,7 @@ def get_rate(currency, asOfDate: datetime):
     rate =  next(rates[day] for day in asOfDates if day in rates)
     return rate
 
-def convert_rate(asOfDate, amount, currency='USD'):
+def convert_rate(asOfDate, amount, currency):
     return amount if currency == 'PLN' else (get_rate(currency, asOfDate) * amount)
 
 def convert_sheet(sheet):

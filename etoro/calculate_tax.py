@@ -190,6 +190,7 @@ def read(path):
                     'status': 'open',
                     'country': CryptoCountry
                 }
+
                 entries.append(trans)
         elif trans_type == "Profit/Loss of Trade":
             if pos_id not in grouped_closed_positions:
@@ -218,14 +219,14 @@ def process_positions(positions, typ):
             if pos["amount"] > 0:
                 raise Exception(f"Positive fee {pos['amount']} for {pos['id']}")
 
-            rate_pln = convert_rate(pos["date"], -pos["amount"])
+            rate_pln = convert_rate(pos["date"], -pos["amount"], currency='USD')
             koszty[country] += rate_pln
             dochod[country] -= rate_pln
         else:
             if pos["status"] == "closed":
                 income_usd[country] += pos["close_amount"] - pos["open_amount"]
-            open_rate_pln = convert_rate(pos["open_date"], pos["open_amount"])
-            close_rate_pln = convert_rate(pos["close_date"], pos["close_amount"])
+            open_rate_pln = convert_rate(pos["open_date"], pos["open_amount"], currency='USD')
+            close_rate_pln = convert_rate(pos["close_date"], pos["close_amount"], currency='USD')
             przychod[country] += close_rate_pln
             koszty[country] += open_rate_pln
             dochod[country] += close_rate_pln - open_rate_pln
@@ -262,7 +263,7 @@ def process_dividends(incomes, dividend_taxes):
         total_usd = dividend_tax["Withholding Tax Amount (USD)"] + dividend_tax["Net Dividend Received (USD)"]
         income_dividends_usd_brutto += total_usd
 
-        total_pln = convert_rate(dividend["date"], total_usd)
+        total_pln = convert_rate(dividend["date"], total_usd, currency='USD')
         przychod_dywidendy += total_pln
         podatek_zaplacony_dywidendy += force_witholding_tax_rate * total_pln
 

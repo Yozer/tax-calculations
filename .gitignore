@@ -44,3 +44,4 @@ nodeLanguageServer.*/**
 *.txt
 *.pdf
 *.xlsx
+*.csv
