@@ -1,2 +1,11 @@
-# calculators for mintos, etoro, binance, coinbase pro, kraken
+# calculators for:
+- mintos
+- etoro
+
+# supported crypto exchanges:
+- binance
+- coinbase pro
+- kraken
+- bittrex
+
 Open relevant folder for more info
