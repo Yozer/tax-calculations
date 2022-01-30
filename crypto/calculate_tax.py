@@ -1,7 +1,7 @@
 from decimal import Decimal
-import binance
+import binance, coinbase_pro
 
-exchanges = [binance.calculate_tax]
+exchanges = [binance.calculate_tax, coinbase_pro.calculate_tax]
 
 przychod_total = Decimal(0)
 koszt_total = Decimal(0)
