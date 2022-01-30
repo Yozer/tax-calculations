@@ -1,11 +1,12 @@
 from decimal import Decimal
-import binance, coinbase_pro
+import binance, coinbase_pro, kraken
 
-exchanges = [binance.calculate_tax, coinbase_pro.calculate_tax]
+exchanges = [binance.calculate_tax, coinbase_pro.calculate_tax, kraken.calculate_tax]
 
 przychod_total = Decimal(0)
 koszt_total = Decimal(0)
 dochod_total = Decimal(0)
+rollover_koszt = Decimal(0)
 fiat_staking_total = Decimal(0)
 
 for exchange in exchanges:
@@ -16,8 +17,10 @@ for exchange in exchanges:
     przychod_total += przychod
     koszt_total += koszt
     dochod_total += dochod
+    rollover_koszt += 0 if przychod > koszt else (koszt - przychod)
     fiat_staking_total += fiat_staking
 
 print()
 print("Łącznie")
-print(f"Przychód: {przychod_total}zł Koszt: {koszt_total}zł Dochód: {dochod_total}zł Fiat staking: {fiat_staking_total}zł")
+print(f"Przychód: {przychod_total}zł Koszt: {koszt_total}zł Dochód: {dochod_total}zł Rollover koszt: {rollover_koszt} (dodać poprzedni rok!)")
+print(f"Fiat staking: {fiat_staking_total}zł")

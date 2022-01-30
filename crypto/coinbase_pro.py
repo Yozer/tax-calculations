@@ -12,7 +12,7 @@ def calculate_tax():
     file_name = 'coinbase_pro.xlsx'
 
     if not os.path.exists(file_name):
-        print(f'WARNING: Binance {file_name} doesnt exist. Skipping')
+        print(f'WARNING: Coinbase pro {file_name} doesnt exist. Skipping')
         return
 
     workbook = load_workbook(filename=file_name)
