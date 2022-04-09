@@ -14,7 +14,7 @@ def calculate_tax():
 
     if not os.path.exists(file_name):
         print(f'WARNING: Binance {file_name} doesnt exist. Skipping')
-        return
+        return(None, None, None, None)
 
     workbook = load_workbook(filename=file_name)
     sheet = convert_sheet(workbook[workbook.sheetnames[0]])
@@ -91,9 +91,9 @@ def calculate_tax2():
         pair = row["Pair"]
         side = row["Side"]
 
-        executed_value = re.sub(r'[a-zA-Z]+', '', executed, re.I) 
-        amount_value = re.sub(r'[a-zA-Z]+', '', amount, re.I) 
-        fee_value = re.sub(r'[a-zA-Z]+', '', fee, re.I) 
+        executed_value = re.sub(r'[a-zA-Z]+', '', executed, re.I)
+        amount_value = re.sub(r'[a-zA-Z]+', '', amount, re.I)
+        fee_value = re.sub(r'[a-zA-Z]+', '', fee, re.I)
         executed = executed.replace(executed_value, '')
         amount = amount.replace(amount_value, '')
         fee = fee.replace(fee_value, '')
@@ -110,7 +110,7 @@ def calculate_tax2():
             raise Exception(f"Unknown side: {side}")
         if executed in fiat_currencies and amount in fiat_currencies:
             raise Exception("Fiat to fiat?")
-        
+
         if amount in fiat_currencies:
             pln = convert_rate(asOfDate, amount_value, currency=amount)
             if side == 'SELL':

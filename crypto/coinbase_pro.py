@@ -13,7 +13,7 @@ def calculate_tax():
 
     if not os.path.exists(file_name):
         print(f'WARNING: Coinbase pro {file_name} doesnt exist. Skipping')
-        return
+        return(None, None, None, None)
 
     workbook = load_workbook(filename=file_name)
     transactions = convert_sheet(workbook[workbook.sheetnames[0]])

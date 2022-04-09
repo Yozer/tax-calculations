@@ -11,6 +11,8 @@ fiat_staking_total = Decimal(0)
 
 for exchange in exchanges:
     exchange_name, przychod, koszt, fiat_staking = exchange()
+    if exchange_name is None:
+        continue
     dochod = (przychod - koszt) if przychod > koszt else Decimal(0)
 
     print(f"Giełda: {exchange_name}\nPrzychód: {przychod}zł Koszt: {koszt}zł Dochód: {dochod}zł Fiat staking: {fiat_staking}zł")
