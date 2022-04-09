@@ -10,12 +10,13 @@ from helpers import sum_dict, convert_rate, convert_sheet
 # pos_types: crypto, stock, dividend, fee
 dividends_abroad_tax_rates = {'USA': Decimal("0.15")}
 tax_rate = Decimal("0.19")
-ignored_transactions = ['Deposit', 
-                        'Start Copy', 
-                        'Account balance to mirror', 
+ignored_transactions = ['Deposit',
+                        'Start Copy',
+                        'Account balance to mirror',
                         'Mirror balance to account',
                         'Stop Copy',
-                        'Edit Stop Loss']
+                        'Edit Stop Loss',
+                        'corp action: Split']
 excel_date_format = '%d/%m/%Y %H:%M:%S'
 
 def group_by_pos_id(transactions):
@@ -178,7 +179,7 @@ def read(path):
         elif trans_type == "Open Position":
             if pos_id not in grouped_closed_positions and get_country_code(None, row["Details"], None, throw=False) == CryptoCountry:
                 print(f"Found krypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
-                
+
                 trans = {
                     'open_date': datetime.strptime(row['Date'], excel_date_format),
                     'close_date': datetime.strptime(row['Date'], excel_date_format),
