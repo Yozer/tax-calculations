@@ -35,7 +35,7 @@ def get_country_code(stock_name, stock_symbol, isin_code, throw=True):
     countries = set(map(get_country_code_from_match, matched))
     if len(countries) > 1:
         raise Exception(f'More than one country for isin {isin_code} {stock_name}')
-    
+
     return countries.pop()
 
 def get_country_code_from_match(match):
@@ -45,13 +45,13 @@ def get_country_code_from_match(match):
         return country_mapping[countryCode]
     elif countryCode not in [None, '', 'null']:
         raise Exception(f'Missing country {countryCode}')
-    
+
     exchange = None if match['Exchange'] is None else match['Exchange'].lower().strip()
     if exchange in mapping:
         return mapping[exchange]
 
     raise Exception(f'Missing mapping for {exchange}')
-        
+
 def load_instruments():
     global instruments_by_symbol
     global instruments_by_full_symbol
@@ -75,10 +75,11 @@ def create_dict(a, keyFunc):
         if k not in result:
             result[k] = []
         result[k] += [x]
-    
+
     return result
 
 country_mapping = {
+    'bm': 'Bermudy',
     'us': 'USA',
     'se': 'Szwecja',
     'fr': 'Francja',
