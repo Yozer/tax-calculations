@@ -178,7 +178,7 @@ def read(path):
             entries.append(process_rollover_fee(row, grouped_transactions, grouped_closed_positions))
         elif trans_type == "Open Position":
             if pos_id not in grouped_closed_positions and get_country_code(None, row["Details"], None, throw=False) == CryptoCountry:
-                print(f"Found krypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
+                print(f"Found crypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
 
                 trans = {
                     'open_date': datetime.strptime(row['Date'], excel_date_format),
@@ -197,7 +197,7 @@ def read(path):
             if pos_id not in grouped_closed_positions:
                 raise Exception(f"Closed but not in closed? wtf {pos_id}")
         elif trans_type not in ignored_transactions:
-            raise Exception(f'Unknown transaction type {trans_type} for position {pos_id}')
+            raise Exception(f'Unknown transaction type "{trans_type}" for position {pos_id}')
 
     return entries
 
