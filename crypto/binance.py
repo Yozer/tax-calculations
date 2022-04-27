@@ -26,9 +26,6 @@ def calculate_tax():
     for row in sheet:
         if row["Account"] == "Card" or row["User_ID"] is None:
             continue
-        if row["Account"] != "Spot":
-            raise Exception(f"Unknown account type for Binance {row['Account']}")
-
         coin = row["Coin"]
         if coin not in ["USD", "EUR", "GBP"]:
             if coin in ignored_coins:
@@ -36,6 +33,9 @@ def calculate_tax():
             print(f"BINANCE: Ignoring coin: '{coin}' It's fine as long as it's not fiat")
             ignored_coins.add(coin)
             continue
+
+        if row["Account"] != "Spot":
+            raise Exception(f"Unknown account type for Binance {row['Account']}")
 
         operation = row["Operation"]
         if operation in operations_to_skip:
