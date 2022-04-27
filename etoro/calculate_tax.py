@@ -17,7 +17,8 @@ ignored_transactions = ['Deposit',
                         'Stop Copy',
                         'Edit Stop Loss',
                         'corp action: Split',
-                        'AirDrop']
+                        'AirDrop',
+                        'Staking']
 excel_date_format = '%d/%m/%Y %H:%M:%S'
 
 def group_by_pos_id(transactions):
