@@ -29,12 +29,6 @@ def calculate_tax():
         if row["Account"] != "Spot":
             raise Exception(f"Unknown account type for Binance {row['Account']}")
 
-        operation = row["Operation"]
-        if operation in operations_to_skip:
-            continue
-        if operation not in operations_to_process:
-            raise Exception(f'Unkown operation for Binance: {operation}')
-
         coin = row["Coin"]
         if coin not in ["USD", "EUR", "GBP"]:
             if coin in ignored_coins:
@@ -42,6 +36,12 @@ def calculate_tax():
             print(f"BINANCE: Ignoring coin: '{coin}' It's fine as long as it's not fiat")
             ignored_coins.add(coin)
             continue
+
+        operation = row["Operation"]
+        if operation in operations_to_skip:
+            continue
+        if operation not in operations_to_process:
+            raise Exception(f'Unkown operation for Binance: {operation}')
 
         asOfDate = row["UTC_Time"].astimezone(warsaw_timezone)
         change = Decimal(str(row["Change"]))
