@@ -7,6 +7,7 @@ from decimal import Decimal
 
 operations_to_skip = ["Deposit", "Withdraw", "Savings purchase", "Savings Principal redemption", "transfer_out", "transfer_in"]
 operations_to_process = ["Transaction Related", "Savings Interest", "Sell", "Fee", "Distribution"]
+ignored_coins = set()
 
 def calculate_tax():
     file_name = 'binance_transaction_history.xlsx'
@@ -34,12 +35,17 @@ def calculate_tax():
         if operation not in operations_to_process:
             raise Exception(f'Unkown operation for Binance: {operation}')
 
-        if row["Coin"] != "EUR":
-            raise Exception(F"Unknown coin for Binance {row['Coin']}")
+        coin = row["Coin"]
+        if coin not in ["USD", "EUR", "GBP"]:
+            if coin in ignored_coins:
+                continue
+            print(f"BINANCE: Ignoring coin: '{coin}' It's fine as long as it's not fiat")
+            ignored_coins.add(coin)
+            continue
 
         asOfDate = row["UTC_Time"].astimezone(warsaw_timezone)
         change = Decimal(str(row["Change"]))
-        pln = convert_rate(asOfDate, change, currency=row["Coin"])
+        pln = convert_rate(asOfDate, change, currency=coin)
 
         if operation in ["Distribution", "Savings Interest"]:
             fiat_staking_total += pln
