@@ -28,7 +28,7 @@ def get_country_code(stock_name, stock_symbol, isin_code, throw=True):
 
     if matched is None:
         if throw:
-            raise Exception(f'Unknown country for isin {isin_code} {stock_name}')
+            raise Exception(f'Unknown country for ISIN: "{isin_code}" stock name: "{stock_name}"')
         else:
             return None
 
