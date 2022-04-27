@@ -1,7 +1,7 @@
 # Binance
-## Export: Wallet -> Transaction history -> Generate all statements
+## Export: Wallet -> Transaction history -> Generate all statements for all coins and transactions
 You have to convert file from csv to xlsx (or make a PR with csv support).
-Only supports EUR staking.
+Only supports EUR/GBP/USD.
 
 # Coinbase NOT IMPLEMENTED
 ## Export: Account -> Reports -> All assets and All transactions to CSV. Then convert it to xlsx.
