@@ -66,8 +66,9 @@ def process_rollover_fee(transaction, transactions, closed_positions):
     if amount != equity_change:
         raise Exception(f'Weird row on position id {transaction["Position ID"]}. Closing')
 
-    transaction_type = transaction['Details'].lower()
-    if transaction_type in ['weekend fee', 'over night fee']:
+    transaction_details = transaction['Details'].lower()
+    transaction_type = transaction['Type'].lower()
+    if transaction_details in ['weekend fee', 'over night fee']:
         country = get_ticker_country(pos_id, transactions, closed_positions)
         if amount < 0:
             pos_type = 'fee'
@@ -85,7 +86,7 @@ def process_rollover_fee(transaction, transactions, closed_positions):
                 'status': 'open',
                 'country': country
             }
-    elif transaction_type == 'payment caused by dividend':
+    elif transaction_details == 'payment caused by dividend' or transaction_type == 'dividend':
         if amount > 0:
             pos_type = 'dividend'
             country = None
@@ -97,7 +98,7 @@ def process_rollover_fee(transaction, transactions, closed_positions):
             pos_type = 'fee'
             country = get_ticker_country(pos_id, transactions, closed_positions)
     else:
-        raise Exception(f"Unkown fee {transaction_type} for position {transaction['Position ID']}")
+        raise Exception(f"Unkown fee {transaction_details} for position {transaction['Position ID']}")
 
     return ({'id': pos_id, 'date': date, 'amount': amount, 'country': country, "type": pos_type})
 
@@ -174,7 +175,7 @@ def read(path):
         if pos_id is None:
             continue
         trans_type = row['Type']
-        if trans_type == 'Rollover Fee':
+        if trans_type in ['Rollover Fee', 'Dividend']:
             entries.append(process_rollover_fee(row, grouped_transactions, grouped_closed_positions))
         elif trans_type == "Open Position":
             if pos_id not in grouped_closed_positions and get_country_code(None, row["Details"], None, throw=False) == CryptoCountry:
