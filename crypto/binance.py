@@ -34,7 +34,7 @@ def calculate_tax():
             ignored_coins.add(coin)
             continue
 
-        if row["Account"] != "Spot":
+        if row["Account"] not in ["Spot", "Savings"]:
             raise Exception(f"Unknown account type for Binance {row['Account']}")
 
         operation = row["Operation"]
