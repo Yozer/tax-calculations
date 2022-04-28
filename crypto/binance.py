@@ -27,7 +27,7 @@ def calculate_tax():
         if row["Account"] == "Card" or row["User_ID"] is None:
             continue
         coin = row["Coin"]
-        if coin not in ["USD", "EUR", "GBP"]:
+        if coin not in fiat_currencies:
             if coin in ignored_coins:
                 continue
             print(f"BINANCE: Ignoring coin: '{coin}' It's fine as long as it's not fiat")
