@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from dateutil import tz
 import requests
@@ -49,3 +49,6 @@ def add_working_days(date, d):
             continue
         business_days_to_add -= 1
     return current_date
+
+def from_utc_to_warsaw(dt: datetime):
+    return dt.replace(tzinfo=timezone.utc).astimezone(tz=warsaw_timezone)

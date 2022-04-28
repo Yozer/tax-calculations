@@ -2,7 +2,7 @@ import os, sys, re
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from openpyxl import load_workbook
-from helpers import convert_rate, convert_sheet, warsaw_timezone, fiat_currencies
+from helpers import convert_rate, convert_sheet, fiat_currencies
 from decimal import Decimal
 
 operations_to_skip = ["deposit", "withdrawal"]
@@ -40,14 +40,14 @@ def calculate_tax():
         if type == 'fee' and coin in fiat_currencies:
             if amount >= 0:
                 raise Exception(f"Positive fee for trade_id: {trade_id}")
-            koszt_total -= convert_rate(asOfDate, amount, currency=coin)
+            koszt_total -= round(convert_rate(asOfDate, amount, currency=coin), 2)
 
         if type != 'match' or coin not in fiat_currencies:
             continue
-        pln = convert_rate(asOfDate, amount, currency=coin)
+        pln = round(convert_rate(asOfDate, amount, currency=coin), 2)
         if pln > 0:
             przychod_total += pln
         else:
             koszt_total -= pln
 
-    return ("Coinbase PRO", round(przychod_total, 2), round(koszt_total, 2), round(fiat_staking_total, 2))
+    return ("Coinbase PRO", przychod_total, koszt_total, fiat_staking_total)
