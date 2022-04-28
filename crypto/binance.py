@@ -45,7 +45,7 @@ def calculate_tax():
 
         asOfDate = row["UTC_Time"].astimezone(warsaw_timezone)
         change = Decimal(str(row["Change"]))
-        pln = convert_rate(asOfDate, change, currency=coin)
+        pln = round(convert_rate(asOfDate, change, currency=coin), 2)
 
         if operation in ["Distribution", "Savings Interest"]:
             fiat_staking_total += pln
@@ -58,4 +58,4 @@ def calculate_tax():
         else:
             przychod_total += pln
 
-    return ("Binance", round(przychod_total, 2), round(koszt_total, 2), round(fiat_staking_total, 2))
+    return ("Binance", przychod_total, koszt_total, fiat_staking_total)
