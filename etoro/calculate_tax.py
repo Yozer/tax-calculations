@@ -8,9 +8,9 @@ from mapping import get_country_code, CryptoCountry, CfdCountry
 from helpers import sum_dict, convert_rate, convert_sheet
 
 # pos_types: crypto, stock, dividend, fee
-dividends_abroad_tax_rates = {'USA': Decimal("0.15")}
 tax_rate = Decimal("0.19")
 ignored_transactions = ['Deposit',
+                        'Position closed', # ignore these and use 'Closed position' sheet to get data
                         'Start Copy',
                         'Account balance to mirror',
                         'Mirror balance to account',
@@ -31,33 +31,27 @@ def group_by_pos_id(transactions):
 
     return res
 
-def get_country_raw(pos_id, transactions, closed_positions):
+def get_ticker_country(pos_id, transactions, closed_positions):
     if pos_id not in transactions:
         raise Exception(f'Logic error. Unable to find position {pos_id} in transactions sheet')
 
-    all_dividends = all(t['Details'].lower() == 'payment caused by dividend' for t in transactions[pos_id])
-    if all_dividends:
-        return ''
     first_transaction = next(t for t in transactions[pos_id] if t['Details'].lower() != 'payment caused by dividend')
-    closed_position = closed_positions[pos_id][0]
-    stock_name = first_transaction['Details']
+    closed_position = closed_positions[pos_id][0] if pos_id in closed_positions else None
+    stock_name = None if closed_position is None else closed_position["Action"]
+    stock_isin = None if closed_position is None else closed_position["ISIN"]
+    stock_symbol = first_transaction['Details']
 
-    return get_country_code(closed_position["Action"], stock_name, closed_position['ISIN'])
+    if closed_position is not None and closed_position["Type"] == "CFD":
+        return CfdCountry
+
+    return get_country_code(stock_name, stock_symbol, stock_isin)
 
 def get_position_type(pos_id, transactions, closed_positions):
     closed_position = closed_positions[pos_id][0]
     is_cfd = closed_position["Type"] == "CFD"
 
-    country= get_country_raw(pos_id, transactions, closed_positions)
+    country = get_ticker_country(pos_id, transactions, closed_positions)
     return "crypto" if country == CryptoCountry and not is_cfd else "stock"
-
-def get_ticker_country(pos_id, transactions, closed_positions):
-    closed_position = closed_positions[pos_id][0]
-    is_cfd = closed_position["Type"] == "CFD"
-    if is_cfd: #is it ok?
-        return CfdCountry
-
-    return get_country_raw(pos_id, transactions, closed_positions)
 
 def process_rollover_fee(transaction, transactions, closed_positions):
     amount = Decimal(str(transaction["Amount"]))
@@ -94,7 +88,7 @@ def process_rollover_fee(transaction, transactions, closed_positions):
             country = None
         else:
             # ujemne dywidendy traktujemy jako koszt
-            if get_country_raw(pos_id, transactions, closed_positions) == CryptoCountry:
+            if get_ticker_country(pos_id, transactions, closed_positions) == CryptoCountry:
                 raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
 
             pos_type = 'fee'
@@ -118,7 +112,7 @@ def read_dividend_taxes(path):
         x["Withholding Tax Rate (%)"] = Decimal(str(x["Withholding Tax Rate (%)"].replace('%', ''))) / Decimal("100")
         x["Net Dividend Received (USD)"] = Decimal(str(x["Net Dividend Received (USD)"]))
         x["Withholding Tax Amount (USD)"] = Decimal(str(x["Withholding Tax Amount (USD)"]))
-        x["Date of Payment"] = datetime.strptime(str(x["Date of Payment"]), excel_date_format)
+        x["Date of Payment"] = datetime.strptime(str(x["Date of Payment"]), '%d/%m/%Y')
         dividend_taxes[pos_id] += [x]
 
     return dividend_taxes
@@ -163,7 +157,6 @@ def read(path):
                 # a kosztem strata
                 trans['open_amount'] = -profit
                 trans['close_amount'] = Decimal("0")
-                # co jesli otworzony cfd byl w 2020 a zamkniety w 2021?
                 trans["open_date"], trans["close_date"] = trans["close_date"], trans["open_date"]
         else:
             # dla akcji albo krypto przychodem jest cena sprzedaży a kosztem cena kupna
@@ -253,7 +246,7 @@ def process_dividends(incomes, dividend_taxes):
         total_usd = dividend["amount"]
         income_dividends_usd += total_usd
 
-        dividend_tax = next((x for x in dividend_taxes[pos_id] if x["Net Dividend Received (USD)"] == total_usd and x["Date of Payment"] == dividend["date"]), None)
+        dividend_tax = next((x for x in dividend_taxes[pos_id] if x["Net Dividend Received (USD)"] == total_usd and x["Date of Payment"].date()== dividend["date"].date()), None)
         if dividend_tax is None:
             raise Exception(f"Unable to match dividend for {pos_id} amount {total_usd} on {dividend['date']}")
 
@@ -262,8 +255,7 @@ def process_dividends(incomes, dividend_taxes):
             del dividend_taxes[pos_id]
 
         income_dividends_usd2 += dividend_tax["Net Dividend Received (USD)"]
-        country = get_country_code(dividend_tax["Instrument Name"], None, dividend_tax["ISIN"])
-        force_witholding_tax_rate = dividends_abroad_tax_rates["USA"] if country == "USA" else dividend_tax["Withholding Tax Rate (%)"]
+        force_witholding_tax_rate = Decimal("0.15") if dividend_tax["ISIN"].startswith("US") and dividend_tax["Withholding Tax Rate (%)"] == Decimal("0.3") else dividend_tax["Withholding Tax Rate (%)"]
         total_usd = dividend_tax["Withholding Tax Amount (USD)"] + dividend_tax["Net Dividend Received (USD)"]
         income_dividends_usd_brutto += total_usd
 
@@ -291,7 +283,7 @@ def process_dividends(incomes, dividend_taxes):
     podatek_zaplacony_dywidendy = round(podatek_zaplacony_dywidendy)
     return (income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy)
 
-fname = 'statement_2021.xlsx'
+fname = 'statement_2022.xlsx'
 entries = read(fname)
 dividend_taxes = read_dividend_taxes(fname)
 income_stock_usd, przychod_stock, koszty_stock, dochod_stock = process_positions(entries, 'stock')

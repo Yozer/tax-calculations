@@ -1,28 +1,41 @@
-from openpyxl import load_workbook
-from helpers import convert_sheet
+import requests, json, re
+
+instruments_link = 'https://api.etorostatic.com/sapi/app-data/web-client/app-data/instruments-groups.json'
+data_link = 'https://api.etorostatic.com/sapi/instrumentsmetadata/V1.1/instruments/bulk?bulkNumber=1&totalBulks=1'
 
 CryptoCountry = 'CryptoCountry'
 CfdCountry = 'Cypr'
-instruments_fname = 'instruments.xlsx'
-instruments_by_symbol = None
 instruments_by_full_symbol = None
 instruments_by_display_name = None
-instruments_by_isin = None
 
 def get_country_code(stock_name, stock_symbol, isin_code, throw=True):
     load_instruments()
 
     matched = None
-    stock_symbol = None if stock_symbol is None else stock_symbol.lower().split('/')[0]
-    stock_name = None if stock_name is None else stock_name.lower().replace("buy ", "").replace("sell ", "")
-    isin_code = None if isin_code is None else isin_code.lower()
+    stock_symbol = None if stock_symbol is None else stock_symbol.lower().split(' ')[0].split('/')
+    if stock_symbol is not None:
 
-    if isin_code is not None and isin_code in instruments_by_isin:
-        matched = instruments_by_isin[isin_code]
+        # deal with cases like META/USD or SMTH.UK/GPB
+        stock_symbol[0] = stock_symbol[0].lower().strip()
+        if '.' not in stock_symbol[0] and len(stock_symbol) > 1:
+            stock_symbol[1] = stock_symbol[1].lower().strip()
+            if stock_symbol[1] == 'usd':
+                stock_symbol[1] = ''
+            elif stock_symbol[1] in stock_symbols_suffix_mapping:
+                stock_symbol[1] = stock_symbols_suffix_mapping[stock_symbol[1]]
+            if stock_symbol[1] in ['', None]:
+                stock_symbol = stock_symbol[0]
+            else:
+                stock_symbol = stock_symbol[0] + '.' + stock_symbol[1]
+        else:
+            stock_symbol = stock_symbol[0]
+
+    stock_name = None if stock_name is None else re.sub(r"^(buy |sell )", "", stock_name.lower()).strip()
+
     if (matched is None or len(matched) > 1) and stock_symbol is not None and stock_symbol in instruments_by_full_symbol:
         matched = instruments_by_full_symbol[stock_symbol]
-    if (matched is None or len(matched) > 1) and stock_symbol is not None and stock_symbol in instruments_by_symbol:
-        matched = instruments_by_symbol[stock_symbol]
+    if (matched is None or len(matched) > 1) and stock_name is not None and stock_name in instruments_by_display_name:
+        matched = instruments_by_display_name[stock_name]
     if (matched is None or len(matched) > 1) and stock_name is not None and stock_name in instruments_by_display_name:
         matched = instruments_by_display_name[stock_name]
 
@@ -39,34 +52,55 @@ def get_country_code(stock_name, stock_symbol, isin_code, throw=True):
     return countries.pop()
 
 def get_country_code_from_match(match):
-    countryCode = None if match['ISINCountryCode'] is None else match['ISINCountryCode'].lower().strip()
-
-    if countryCode in country_mapping:
-        return country_mapping[countryCode]
-    elif countryCode not in [None, '', 'null']:
-        raise Exception(f'Missing country {countryCode}')
+    if match['InstrumentType'] == 'Cryptocurrencies':
+        return CryptoCountry
 
     exchange = None if match['Exchange'] is None else match['Exchange'].lower().strip()
     if exchange in mapping:
         return mapping[exchange]
 
-    raise Exception(f'Missing mapping for {exchange}')
+    if match['InstrumentType'] in ['Currencies', 'Indices', 'ETF', 'Commodities']:
+        return CfdCountry
+
+    raise Exception(f'Missing mapping for {exchange}. SymbolName: {match["SymbolFull"]}')
 
 def load_instruments():
-    global instruments_by_symbol
     global instruments_by_full_symbol
     global instruments_by_display_name
-    global instruments_by_isin
 
     if instruments_by_full_symbol is None:
-        workbook = load_workbook(filename=instruments_fname, read_only=False)
-        sheet = workbook['Instruments Offered']
-        x = [y for y in convert_sheet(sheet) if y['SymbolFull'] is not None]
+        parsed_types = json.loads(requests.get(instruments_link).text)
+        instruments = parsed_types['InstrumentTypes']
+        exchanges = parsed_types['ExchangeInfo']
 
-        instruments_by_symbol = create_dict(x, lambda y: str(y['Symbol']).lower())
-        instruments_by_full_symbol = create_dict(x, lambda y: str(y['SymbolFull']).lower())
-        instruments_by_display_name = create_dict(x, lambda y: str(y['InstrumentDisplayName']).lower())
-        instruments_by_isin = create_dict(x, lambda y: str(y['ISINCode']).lower())
+        data = json.loads(requests.get(data_link).text)['InstrumentDisplayDatas']
+        all_instruments = []
+        for d in data:
+            # If the instrument is not available for the users, we don't need it
+            if d['IsInternalInstrument']:
+                continue
+
+            instrument_typeID = d['InstrumentTypeID']
+            name = d['InstrumentDisplayName']
+            exchangeID = d['ExchangeID']
+            symbol = d['SymbolFull']
+            instrument_type = next(item for item in instruments if item['InstrumentTypeID'] == instrument_typeID)['InstrumentTypeDescription']
+
+            try:
+                exchange = next(item for item in exchanges if item['ExchangeID'] == exchangeID)['ExchangeDescription']
+            except StopIteration:
+                exchange = None
+
+            # Sum up the gathered data
+            all_instruments.append({
+                'InstrumentDisplayName': name,
+                'SymbolFull': symbol,
+                'InstrumentType': instrument_type,
+                'Exchange': exchange
+            })
+
+        instruments_by_full_symbol = create_dict(all_instruments, lambda y: str(y['SymbolFull']).lower())
+        instruments_by_display_name = create_dict(all_instruments, lambda y: str(y['InstrumentDisplayName']).lower())
 
 def create_dict(a, keyFunc):
     result = {}
@@ -78,44 +112,33 @@ def create_dict(a, keyFunc):
 
     return result
 
-country_mapping = {
-    'bm': 'Bermudy',
-    'us': 'USA',
-    'se': 'Szwecja',
-    'fr': 'Francja',
-    'gg': 'Guernsey (GB jak nie ma w formularzu)',
-    'je': 'Jersey  (GB jak nie ma w formularzu)',
-    'gb': 'Wielka Brytania',
-    'ca': 'Kanada',
-    'de': 'Niemcy',
-    'lu': 'Luksemburg',
-    'es': 'Hiszpania',
-    'chf': 'Szwajcaria',
-    'ch': 'Szwajcaria',
-    'il': 'Izrael',
-    'ky': 'Kajmany',
-    'nl': 'Holandia',
-    'cn': 'Chiny',
-    'no': 'Norwegia',
-    'ie': 'Irlandia',
-    'hk': 'Hong Kong'
+stock_symbols_suffix_mapping = {
+    'dkk': 'co',
+    'gbx': 'l'
 }
-
 mapping = {
-    'fx': CfdCountry,
-    'commodity': CfdCountry,
-    'digital currency': CryptoCountry,
 
-    'nsdq': 'USA',
+    # 'nsdq': 'USA',
     'nasdaq': 'USA',
     'nyse': 'USA',
 
-    'hong kong exchanges': 'Hong Kong',
-    'lse': 'Wielka Brytania',
-    'six': 'Szwajcaria',
-    'bolsa de madrid': 'Hiszpania',
-    'euronext paris': 'Francja',
-    'fra': 'Niemcy',
-    'cse': 'Kanada',
-    'hel': 'Finlandia'
+    'stockholm': 'Szwecja',
+    'copenhagen': 'Dania',
+    'frankfurt': 'Niemcy',
+    'london': 'Wielka Brytania',
+    'bolsademadrid': 'Hiszpania',
+    'zurich': 'Szwajcaria',
+    'paris': 'Francja',
+    'oslo': 'Norwegia',
+    'hongkong': 'Hong Kong',
+    'helsinki': 'Finlandia'
+
+    # 'hong kong exchanges': 'Hong Kong',
+    # 'lse': 'Wielka Brytania',
+    # 'six': 'Szwajcaria',
+    # 'bolsa de madrid': 'Hiszpania',
+    # 'euronext paris': 'Francja',
+    # 'fra': 'Niemcy',
+    # 'cse': 'Kanada',
+    # 'hel': 'Finlandia'
 }
