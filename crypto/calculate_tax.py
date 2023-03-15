@@ -1,7 +1,8 @@
 from decimal import Decimal
 import binance, coinbase_pro, kraken, bittrex
 
-exchanges = [binance.calculate_tax, coinbase_pro.calculate_tax, kraken.calculate_tax, bittrex.calculate_tax]
+# exchanges = [binance.calculate_tax, coinbase_pro.calculate_tax, kraken.calculate_tax, bittrex.calculate_tax]
+exchanges = [binance.calculate_tax]
 
 przychod_total = Decimal(0)
 koszt_total = Decimal(0)

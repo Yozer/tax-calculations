@@ -5,12 +5,12 @@ from openpyxl import load_workbook
 from helpers import convert_rate, convert_sheet, warsaw_timezone, fiat_currencies
 from decimal import Decimal
 
-operations_to_skip = ["Deposit", "Withdraw", "Savings purchase", "Savings Principal redemption", "transfer_out", "transfer_in"]
-operations_to_process = ["Transaction Related", "Savings Interest", "Sell", "Fee", "Distribution"]
+operations_to_skip = ["Deposit", "Withdraw", "Savings purchase", "Savings Principal redemption", "transfer_out", "transfer_in", "Binance Card Spending", "Fiat Deposit"]
+operations_to_process = ["Transaction Related", "Savings Interest", "Sell", "Fee", "Distribution", "Transaction Sold"]
 ignored_coins = set()
 
 def calculate_tax():
-    file_name = 'binance_transaction_history.xlsx'
+    file_name = 'binance.xlsx'
 
     if not os.path.exists(file_name):
         print(f'WARNING: Binance {file_name} doesnt exist. Skipping')
@@ -34,7 +34,7 @@ def calculate_tax():
             ignored_coins.add(coin)
             continue
 
-        if row["Account"] not in ["Spot", "Savings"]:
+        if row["Account"] not in ["SPOT", "Savings", "CARD"]:
             raise Exception(f"Unknown account type for Binance {row['Account']}")
 
         operation = row["Operation"]
