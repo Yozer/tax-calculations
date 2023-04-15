@@ -25,7 +25,7 @@ def calculate_tax(path):
         if row['Input Currency'] != 'EURX':
             print(f"Waluta {row['Input Currency']} nieobsługiwana.")
             continue
-        date = row['Date / Time']
+        date = datetime.strptime(row['Date / Time'], '%Y-%m-%d %H:%M:%S')
         amount = convert_rate(date, Decimal(str(row["Input Amount"])), 'EUR')
 
         income += amount
