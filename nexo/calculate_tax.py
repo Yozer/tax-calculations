@@ -22,10 +22,16 @@ def calculate_tax(path):
         trans_type = row['Type']
         if trans_type not in ['Interest', 'FixedTermInterest']:
             continue
-        if row['Input Currency'] != 'EURX':
+        if row['Input Currency'] not in ['EURX', 'USDT']:
+            print(f"Waluta {row['Input Currency']} nieobsługiwana.")
             continue
-        date = row['Date / Time']
-        amount = convert_rate(date, Decimal(str(row["Input Amount"])), 'EUR')
+        date = datetime.strptime(row['Date / Time'], '%Y-%m-%d %H:%M:%S')
+
+        if row['Input Currency'] == 'EURX':
+            amount = convert_rate(date, Decimal(str(row["Input Amount"])), 'EUR')
+
+        if row['Input Currency'] == 'USDT':
+            amount = convert_rate(date, Decimal(str(row["Input Amount"])), 'USD')
 
         income += amount
 
