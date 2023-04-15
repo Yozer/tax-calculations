@@ -23,6 +23,7 @@ def calculate_tax(path):
         if trans_type not in ['Interest', 'FixedTermInterest']:
             continue
         if row['Input Currency'] != 'EURX':
+            print(f"Waluta {row['Input Currency']} nieobsługiwana.")
             continue
         date = row['Date / Time']
         amount = convert_rate(date, Decimal(str(row["Input Amount"])), 'EUR')
