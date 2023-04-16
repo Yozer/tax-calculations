@@ -1,6 +1,6 @@
 import os, sys, re
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-
+from datetime import datetime
 from openpyxl import load_workbook
 from helpers import convert_rate, convert_sheet, fiat_currencies
 from decimal import Decimal
@@ -32,7 +32,7 @@ def calculate_tax():
         if type not in operations_to_process:
             raise Exception(f'Coinbase pro. Unknown transaction type {type}')
 
-        asOfDate = row["time"]
+        asOfDate = datetime.strptime(row['time'], '%Y-%m-%dT%H:%M:%S.%fZ')
         trade_id = row["trade id"]
         amount = Decimal(str(row["amount"]))
         coin = row["amount/balance unit"]

@@ -3,6 +3,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from openpyxl import load_workbook
 from helpers import convert_rate, convert_sheet
+from datetime import datetime
 from decimal import Decimal
 
 operations_to_skip = ["deposit", "withdrawal", "transfer"]
@@ -35,7 +36,7 @@ def calculate_tax():
         txid = row["txid"]
         amount = Decimal(str(row['amount']))
         fee = Decimal(str(row['fee']))
-        asOfDate = row["time"]
+        asOfDate = datetime.strptime(row["time"], '%Y-%m-%d %H:%M:%S')
         if row['asset'] not in ['ZEUR', 'EUR.M']:
             continue
 

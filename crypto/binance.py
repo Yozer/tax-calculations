@@ -3,10 +3,11 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from openpyxl import load_workbook
 from helpers import convert_rate, convert_sheet, warsaw_timezone, fiat_currencies
+from datetime import datetime
 from decimal import Decimal
 
 operations_to_skip = ["Deposit", "Withdraw", "Savings purchase", "Savings Principal redemption", "transfer_out", "transfer_in", "Binance Card Spending", "Fiat Deposit"]
-operations_to_process = ["Transaction Related", "Savings Interest", "Sell", "Fee", "Distribution", "Transaction Sold"]
+operations_to_process = ["Transaction Related", "Savings Interest", "Sell", "Fee", "Distribution", "Transaction Buy", "Transaction Sold"]
 ignored_coins = set()
 
 def calculate_tax():
@@ -43,7 +44,7 @@ def calculate_tax():
         if operation not in operations_to_process:
             raise Exception(f'Unkown operation for Binance: {operation}')
 
-        asOfDate = row["UTC_Time"].astimezone(warsaw_timezone)
+        asOfDate = datetime.strptime(row['UTC_Time'], '%Y-%m-%d %H:%M:%S').astimezone(warsaw_timezone)
         change = Decimal(str(row["Change"]))
         pln = round(convert_rate(asOfDate, change, currency=coin), 2)
 
