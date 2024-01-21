@@ -36,8 +36,6 @@ def get_country_code(stock_name, stock_symbol, isin_code, throw=True):
         matched = instruments_by_full_symbol[stock_symbol]
     if (matched is None or len(matched) > 1) and stock_name is not None and stock_name in instruments_by_display_name:
         matched = instruments_by_display_name[stock_name]
-    if (matched is None or len(matched) > 1) and stock_name is not None and stock_name in instruments_by_display_name:
-        matched = instruments_by_display_name[stock_name]
 
     if matched is None:
         if throw:
@@ -69,11 +67,11 @@ def load_instruments():
     global instruments_by_display_name
 
     if instruments_by_full_symbol is None:
-        parsed_types = json.loads(requests.get(instruments_link).text)
+        parsed_types = requests.get(instruments_link).json()
         instruments = parsed_types['InstrumentTypes']
         exchanges = parsed_types['ExchangeInfo']
 
-        data = json.loads(requests.get(data_link).text)['InstrumentDisplayDatas']
+        data = requests.get(data_link).json()['InstrumentDisplayDatas']
         all_instruments = []
         for d in data:
             # If the instrument is not available for the users, we don't need it
@@ -114,7 +112,8 @@ def create_dict(a, keyFunc):
 
 stock_symbols_suffix_mapping = {
     'dkk': 'co',
-    'gbx': 'l'
+    'gbx': 'l',
+    'chf': 'zu',
 }
 mapping = {
 

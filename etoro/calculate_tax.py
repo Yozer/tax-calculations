@@ -129,8 +129,8 @@ def read(path):
         pos_id = row['Position ID']
         if pos_id is None:
             continue
-        amount = Decimal(str(row['Amount']).replace(',', '.'))
-        profit = Decimal(str(row['Profit']).replace(',', '.'))
+        units = Decimal(str(row['Units']).replace(',', '.'))
+        profit = Decimal(str(row['Amount']).replace(',', '.'))
         pos_type = get_position_type(pos_id, grouped_transactions, grouped_closed_positions)
         is_cfd = row["Type"] == "CFD"
         is_sell = row["Action"].startswith("Sell")
@@ -160,8 +160,8 @@ def read(path):
                 trans["open_date"], trans["close_date"] = trans["close_date"], trans["open_date"]
         else:
             # dla akcji albo krypto przychodem jest cena sprzedaży a kosztem cena kupna
-            trans["open_amount"] = amount
-            trans["close_amount"] = amount + profit
+            trans["open_amount"] = units
+            trans["close_amount"] = units + profit
 
         entries.append(trans)
 
@@ -283,7 +283,7 @@ def process_dividends(incomes, dividend_taxes):
     podatek_zaplacony_dywidendy = round(podatek_zaplacony_dywidendy)
     return (income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy)
 
-fname = 'statement_2022.xlsx'
+fname = 'statement_2023.xlsx'
 entries = read(fname)
 dividend_taxes = read_dividend_taxes(fname)
 income_stock_usd, przychod_stock, koszty_stock, dochod_stock = process_positions(entries, 'stock')
