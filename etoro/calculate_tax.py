@@ -73,13 +73,14 @@ def process_rollover_fee(transaction, transactions, closed_positions):
 
     transaction_details = transaction['Details'].lower()
     transaction_type = transaction['Type'].lower()
-    if transaction_details in ['weekend fee', 'over night fee']:
+    if transaction_details in ['weekend fee', 'over night fee'] or transaction_type == 'sdrt':
         country = get_ticker_country(pos_id, transactions, closed_positions)
         if amount < 0:
             pos_type = 'fee'
             if country == CryptoCountry:
                 raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
         else:
+            # refund fee, treat as profit
             return {
                 'open_date': date,
                 'close_date': date,
@@ -179,7 +180,7 @@ def read(path):
         if pos_id is None:
             continue
         trans_type = row['Type']
-        if trans_type in ['Rollover Fee', 'Dividend']:
+        if trans_type in ['Rollover Fee', 'Dividend', 'SDRT']:
             entries.append(process_rollover_fee(row, grouped_transactions, grouped_closed_positions))
         elif trans_type == 'Interest Payment':
             entries.append(process_interest_payment(row))
