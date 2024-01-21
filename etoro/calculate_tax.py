@@ -53,6 +53,15 @@ def get_position_type(pos_id, transactions, closed_positions):
     country = get_ticker_country(pos_id, transactions, closed_positions)
     return "crypto" if country == CryptoCountry and not is_cfd else "stock"
 
+def process_interest_payment(transaction):
+    pos_id = transaction["Position ID"]
+    amount = Decimal(str(transaction["Amount"]))
+    date = datetime.strptime(transaction['Date'], excel_date_format)
+    trans = {'id': pos_id, 'open_date': date, 'close_date': date, 'amount': amount, 'country': CfdCountry, "type": 'stock', 'status': 'closed'}
+    trans['open_amount'] = Decimal("0")
+    trans['close_amount'] = amount
+    return trans
+
 def process_rollover_fee(transaction, transactions, closed_positions):
     amount = Decimal(str(transaction["Amount"]))
     pos_id = transaction["Position ID"]
@@ -172,6 +181,8 @@ def read(path):
         trans_type = row['Type']
         if trans_type in ['Rollover Fee', 'Dividend']:
             entries.append(process_rollover_fee(row, grouped_transactions, grouped_closed_positions))
+        elif trans_type == 'Interest Payment':
+            entries.append(process_interest_payment(row))
         elif trans_type == "Open Position":
             if pos_id not in grouped_closed_positions and get_country_code(None, row["Details"], None, throw=False) == CryptoCountry:
                 print(f"Found crypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
