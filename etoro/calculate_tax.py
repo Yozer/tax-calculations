@@ -139,8 +139,8 @@ def read(path):
         pos_id = row['Position ID']
         if pos_id is None:
             continue
-        units = Decimal(str(row['Units']).replace(',', '.'))
-        profit = Decimal(str(row['Amount']).replace(',', '.'))
+        amount = Decimal(str(row['Amount']).replace(',', '.'))
+        profit = Decimal(str(row['Profit(USD)']).replace(',', '.'))
         pos_type = get_position_type(pos_id, grouped_transactions, grouped_closed_positions)
         is_cfd = row["Type"] == "CFD"
         is_sell = row["Action"].startswith("Sell")
@@ -170,11 +170,11 @@ def read(path):
                 trans["open_date"], trans["close_date"] = trans["close_date"], trans["open_date"]
         else:
             # dla akcji albo krypto przychodem jest cena sprzedaży a kosztem cena kupna
-            trans["open_amount"] = units
-            trans["close_amount"] = units + profit
+            trans["open_amount"] = amount
+            trans["close_amount"] = amount + profit
 
         entries.append(trans)
-
+    
     for row in transactions:
         pos_id = row['Position ID']
         if pos_id is None:
