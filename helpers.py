@@ -22,7 +22,12 @@ def get_rate(currency, asOfDate: datetime):
     rates = fetch_rates(currency, asOfDate.year)
     asOfDate = asOfDate.date()
     asOfDates = [asOfDate - timedelta(days=i) for i in range(1, 5)]
-    rate =  next(rates[day] for day in asOfDates if day in rates)
+    rate =  next((rates[day] for day in asOfDates if day in rates), None)
+    if rate is None:
+        rates = fetch_rates(currency, asOfDate.year - 1)
+        asOfDates = [asOfDate - timedelta(days=i) for i in range(0, 4)]
+        rate =  next(rates[day] for day in asOfDates if day in rates)
+
     return rate
 
 def convert_rate(asOfDate, amount, currency):
