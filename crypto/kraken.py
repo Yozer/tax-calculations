@@ -2,8 +2,9 @@ import os, sys, re
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from openpyxl import load_workbook
-from helpers import convert_rate, convert_sheet
+from helpers import convert_rate, convert_sheet, warsaw_timezone
 from decimal import Decimal
+from datetime import datetime
 
 operations_to_skip = ["deposit", "withdrawal", "transfer"]
 operations_to_process = ["staking", "trade", "spend", "receive"]
@@ -35,7 +36,7 @@ def calculate_tax():
         txid = row["txid"]
         amount = Decimal(str(row['amount']))
         fee = Decimal(str(row['fee']))
-        asOfDate = row["time"]
+        asOfDate = row["time"] if isinstance(row["time"], datetime) else datetime.strptime(row["time"], '%Y-%m-%d %H:%M:%S').astimezone(warsaw_timezone)
         if row['asset'] not in ['ZEUR', 'EUR.M']:
             continue
 
