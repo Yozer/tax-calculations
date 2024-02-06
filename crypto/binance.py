@@ -4,9 +4,10 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 from openpyxl import load_workbook
 from helpers import convert_rate, convert_sheet, warsaw_timezone, fiat_currencies
 from decimal import Decimal
+from datetime import datetime
 
-operations_to_skip = ["Deposit", "Withdraw", "Savings purchase", "Savings Principal redemption", "transfer_out", "transfer_in", "Binance Card Spending", "Fiat Deposit"]
-operations_to_process = ["Transaction Related", "Savings Interest", "Sell", "Fee", "Distribution", "Transaction Sold"]
+operations_to_skip = ["Deposit", "Withdraw", "Savings purchase", "Savings Principal redemption", "transfer_out", "transfer_in", "Binance Card Spending", "Fiat Deposit", "Transfer Between Main and Funding Wallet"]
+operations_to_process = ["Transaction Related", "Savings Interest", "Sell", "Fee", "Distribution", "Transaction Sold", "Transaction Buy", 'Transaction Revenue', 'Binance Convert']
 ignored_coins = set()
 
 def calculate_tax():
@@ -34,16 +35,16 @@ def calculate_tax():
             ignored_coins.add(coin)
             continue
 
-        if row["Account"] not in ["SPOT", "Savings", "CARD"]:
-            raise Exception(f"Unknown account type for Binance {row['Account']}")
+        if row["Account"].upper() not in ["SPOT", "SAVINGS", "CARD", "FUNDING"]:
+            raise Exception(f"Unknown account type for Binance: {row['Account']}")
 
         operation = row["Operation"]
         if operation in operations_to_skip:
             continue
         if operation not in operations_to_process:
-            raise Exception(f'Unkown operation for Binance: {operation}')
+            raise Exception(f'Unkown operation for Binance: {operation} for {row["Account"]} and {coin}')
 
-        asOfDate = row["UTC_Time"].astimezone(warsaw_timezone)
+        asOfDate = row['UTC_Time'] if isinstance(row['UTC_Time'], datetime) else datetime.strptime(row['UTC_Time'], '%Y-%m-%d %H:%M:%S').astimezone(warsaw_timezone)
         change = Decimal(str(row["Change"]))
         pln = round(convert_rate(asOfDate, change, currency=coin), 2)
 
