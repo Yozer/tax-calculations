@@ -97,12 +97,15 @@ def process_rollover_fee(transaction, transactions, closed_positions):
             pos_type = 'dividend'
             country = None
         else:
-            # ujemne dywidendy traktujemy jako koszt
-            if get_ticker_country(pos_id, transactions, closed_positions) == CryptoCountry:
-                raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
+            pos_type = 'dividend'
+            country = None
 
-            pos_type = 'fee'
-            country = get_ticker_country(pos_id, transactions, closed_positions)
+            # ujemne dywidendy traktujemy jako koszt
+            # if get_ticker_country(pos_id, transactions, closed_positions) == CryptoCountry:
+            #     raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
+
+            # pos_type = 'fee'
+            # country = get_ticker_country(pos_id, transactions, closed_positions)
     else:
         raise Exception(f"Unkown fee {transaction_details} for position {transaction['Position ID']}")
 
@@ -258,6 +261,9 @@ def process_dividends(incomes, dividend_taxes):
         total_usd = dividend["amount"]
         income_dividends_usd += total_usd
 
+        if pos_id not in dividend_taxes:
+            print(f'Unable to find {pos_id} in Dividends sheet. Possibly bug from etoro, if amout is big contact them. Otherwise manually mark that position in Account Activity as "Rollover Fee" and Details to "Over night fee"')
+            continue
         dividend_tax = next((x for x in dividend_taxes[pos_id] if x["Net Dividend Received (USD)"] == total_usd and x["Date of Payment"].date()== dividend["date"].date()), None)
         if dividend_tax is None:
             raise Exception(f"Unable to match dividend for {pos_id} amount {total_usd} on {dividend['date']}")
@@ -282,8 +288,10 @@ def process_dividends(incomes, dividend_taxes):
 
     # validate
     if sum_from_dividend_taxes != income_dividends_usd:
-        duplicated_pos_ids = "\r\n".join(dividend_taxes.keys())
-        raise Exception("Suma dywidend między Dywidendy i Transaction Report się nie zgadza: " + duplicated_pos_ids)
+        for pos_id, tax in dividend_taxes.items():
+            print(f'Pos id: {pos_id} {tax}')
+        raise Exception("Suma dywidend między Dywidendy i Transaction Report się nie zgadza. Prawdopodobnie negatywne dywidendy (adjustmenty przez etoro). Zweryfikuj transakcje i manualnie zrób reconciliation w excelu.")
+
     if len(dividend_taxes) != 0:
         raise Exception("Niewykorzystano wszystkich dywidend do rozdzielenia podatku!")
 
