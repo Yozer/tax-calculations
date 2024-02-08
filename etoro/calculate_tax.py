@@ -79,23 +79,12 @@ def process_rollover_fee(transaction, transactions, closed_positions):
         if country == CryptoCountry:
             raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
     elif transaction_details == 'payment caused by dividend' or transaction_type == 'dividend':
-        if amount > 0:
-            pos_type = 'dividend'
-            country = None
-        else:
-            pos_type = 'dividend'
-            country = None
-            
-            # ujemne dywidendy traktujemy jako koszt
-            # if get_ticker_country(pos_id, transactions, closed_positions) == CryptoCountry:
-            #     raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
-
-            # pos_type = 'fee'
-            # country = get_ticker_country(pos_id, transactions, closed_positions)
+        pos_type = 'dividend'
+        country = None
     else:
         raise Exception(f"Unkown fee {transaction_details} for position {transaction['Position ID']}")
 
-    return ({'id': pos_id, 'date': date, 'amount': amount, 'country': country, "type": pos_type})
+    return {'id': pos_id, 'date': date, 'amount': amount, 'country': country, "type": pos_type}
 
 def read_dividend_taxes(path):
     workbook = load_workbook(filename=path)
@@ -196,15 +185,27 @@ def read(path):
         elif trans_type not in ignored_transactions:
             raise Exception(f'Unknown transaction type "{trans_type}" for position {pos_id}')
 
-    return entries
+    return (entries, grouped_transactions, grouped_closed_positions)
 
-def process_positions(positions, typ):
-    positions = [x for x in positions if x["type"] == typ or (typ == "stock" and x['type'] == "fee")]
+def process_positions(input_positions, typ, unmatched_dividend_position_ids=None, transactions=None, closed_positions=None):
+    positions = list([x for x in input_positions if x["type"] == typ or (typ == "stock" and x['type'] == "fee")])
     income_usd = {}
     fees_usd = {}
     przychod = {}
     koszty = {}
     dochod = {}
+    negative_dividend_sum = Decimal('0')
+
+    if unmatched_dividend_position_ids is not None:
+        for negative_dividend in [x for x in input_positions if x['type'] == 'dividend' and x['amount'] < 0 and x['id'] in unmatched_dividend_position_ids]:
+            # ujemne dywidendy traktujemy jako koszt, ale tylko dla niezmatchowanych wczesniej dywidend z sheetu 'Dividends'
+            pos_id = negative_dividend['id']
+            country = get_ticker_country(pos_id, transactions, closed_positions)
+            if country == CryptoCountry:
+                raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
+            fee = {'id': pos_id, 'date': negative_dividend['date'], 'amount': negative_dividend['amount'], 'country': country, "type": 'fee'}
+            positions.append(fee)
+            negative_dividend_sum -= negative_dividend['amount']
 
     for pos in positions:
         country = pos["country"]
@@ -229,11 +230,12 @@ def process_positions(positions, typ):
             koszty[country] += open_rate_pln
             dochod[country] += close_rate_pln - open_rate_pln
 
-    return (income_usd, fees_usd, przychod, koszty, dochod)
+    return (income_usd, fees_usd, przychod, koszty, dochod, round(negative_dividend_sum, 2))
 
 def process_dividends(incomes, dividend_taxes):
     dividends = [x for x in incomes if x["type"] == 'dividend']
     sum_from_dividend_taxes = sum([item["Net Dividend Received (USD)"] for sublist in dividend_taxes.values() for item in sublist])
+    unmatched_dividend_position_ids = set()
 
     income_dividends_usd = Decimal("0")
     income_dividends_usd2 = Decimal("0")
@@ -245,11 +247,13 @@ def process_dividends(incomes, dividend_taxes):
     for dividend in dividends:
         pos_id = dividend["id"]
         total_usd = dividend["amount"]
-        income_dividends_usd += total_usd
 
         if pos_id not in dividend_taxes:
-            print(f'Unable to find {pos_id} in Dividends sheet. Possibly bug from etoro, if amout is big contact them. Otherwise manually mark that position in Account Activity as "Rollover Fee" and Details to "Over night fee")')
+            print(f'Unable to find {pos_id} amount {total_usd} on {dividend["date"]} in Dividends sheet. Possibly bug from etoro, if amout is big contact them. Otherwise ignore warning.')
+            unmatched_dividend_position_ids.add(pos_id)
             continue
+
+        income_dividends_usd += total_usd
         dividend_tax = next((x for x in dividend_taxes[pos_id] if x["Net Dividend Received (USD)"] == total_usd and x["Date of Payment"].date()== dividend["date"].date()), None)
         if dividend_tax is None:
             raise Exception(f"Unable to match dividend for {pos_id} amount {total_usd} on {dividend['date']}")
@@ -287,35 +291,22 @@ def process_dividends(incomes, dividend_taxes):
     podstawa_dywidendy = round(przychod_dywidendy)
     podatek_nalezny_dywidendy = round(podatek_nalezny_dywidendy)
     podatek_zaplacony_dywidendy = round(podatek_zaplacony_dywidendy)
-    return (income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy)
+    return (income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy, unmatched_dividend_position_ids)
+
+def print_warning():
+    print()
+    print("-------------------------IMPORTANT----------------------------")
+    print("Compare USD numbers with 'Financial Summary' in your excel. Sums have to be equal")
+    print("-------------------------IMPORTANT----------------------------")
+    print()
+
+print_warning()
 
 fname = 'statement_2023.xlsx'
-entries = read(fname)
+entries, grouped_transactions, grouped_closed_positions = read(fname)
 dividend_taxes = read_dividend_taxes(fname)
-income_stock_usd, fees_stock_usd, przychod_stock, koszty_stock, dochod_stock = process_positions(entries, 'stock')
-print("-----------------IMPORTANT-----------------")
-print("Compare USD numbers below with 'Financial Summary' in your excel. Sums have to be equal")
-print("-----------------IMPORTANT-----------------")
-print()
 
-print("Stocks na Pit-38 sekcja C jako inne przychody. Koniecznie z załącznikiem PIT/ZG")
-print(f"Dochód $ za stocks: ${sum_dict(income_stock_usd)} (w summary suma 'CFDs (Profit or Loss)' + 'Stocks (Profit or Loss)' + 'Total Interest payments by eToro EU'")
-print(f"Koszty $ za stocks: ${sum_dict(fees_stock_usd)} (w summary suma 'Fees' + 'SDRT Charge')")
-print(f"Przychód w pln za stocks: {sum_dict(przychod_stock)} zł")
-print(f"Koszt w pln za stocks: {sum_dict(koszty_stock)} zł")
-print(f"Dochód w pln za stocks: {sum_dict(dochod_stock)} zł")
-print(f'Dochód per kraj (na PIT/ZG wpisujemy tylko dodatnie): {dict([(x, str(y)) for x, y in dochod_stock.items()])}')
-
-income_crypto_usd, fees_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto = process_positions(entries, 'crypto')
-print()
-print("Crypto rozliczamy na PIT-38 sekcja E")
-print(f"Dochód $ za crypto: ${sum_dict(income_crypto_usd)} (w summary 'Crypto (Profit or Loss)')")
-print(f"Koszty $ za crypto: ${sum_dict(fees_crypto_usd)} (powinno być zawsze zero)")
-print(f"Przychód w pln za crypto: {sum_dict(przychod_crypto)} zł")
-print(f"Koszt w pln za crypto: {sum_dict(koszty_crypto)} zł")
-print(f"Dochód w pln za crypto: {sum_dict(dochod_crypto)} zł")
-
-income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy = process_dividends(entries, dividend_taxes)
+income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy, unmatched_dividend_position_ids = process_dividends(entries, dividend_taxes)
 podatek_do_zaplaty_dywidendy = podatek_nalezny_dywidendy - podatek_zaplacony_dywidendy
 print()
 print("Dywidendy na PIT-38 sekcja G (podatek poza granicami pln)")
@@ -326,3 +317,24 @@ print(f"Podstawa w pln za dywidendy: {podstawa_dywidendy} zł")
 print(f"Podatek należny: {podatek_nalezny_dywidendy} zł")
 print(f"Podatek zapłacony za granicą: {podatek_zaplacony_dywidendy} zł")
 print(f"Podatek za dywidendy: {podatek_do_zaplaty_dywidendy} zł")
+
+income_stock_usd, fees_stock_usd, przychod_stock, koszty_stock, dochod_stock, negative_dividend_sum = process_positions(entries, 'stock', unmatched_dividend_position_ids, grouped_transactions, grouped_closed_positions)
+print()
+print("Stocks na Pit-38 sekcja C jako inne przychody. Koniecznie z załącznikiem PIT/ZG")
+print(f"Dochód $ za stocks: ${sum_dict(income_stock_usd)} (w summary suma 'CFDs (Profit or Loss)' + 'Stocks (Profit or Loss)' + 'ETFs (Profit or Loss)' + 'Total Interest payments by eToro EU'")
+print(f"Koszty $ za stocks: ${sum_dict(fees_stock_usd)} (w tym negatywne dywidendy: ${negative_dividend_sum}) (w summary suma 'Fees' + 'SDRT Charge' - te negatywne dywidendy czyli ${sum_dict(fees_stock_usd)+negative_dividend_sum})")
+print(f"Przychód w pln za stocks: {sum_dict(przychod_stock)} zł")
+print(f"Koszt w pln za stocks: {sum_dict(koszty_stock)} zł")
+print(f"Dochód w pln za stocks: {sum_dict(dochod_stock)} zł")
+print(f'Dochód per kraj (na PIT/ZG wpisujemy tylko dodatnie): {dict([(x, str(y)) for x, y in dochod_stock.items()])}')
+
+income_crypto_usd, fees_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto, _ = process_positions(entries, 'crypto')
+print()
+print("Crypto rozliczamy na PIT-38 sekcja E")
+print(f"Dochód $ za crypto: ${sum_dict(income_crypto_usd)} (w summary 'Crypto (Profit or Loss)')")
+print(f"Koszty $ za crypto: ${sum_dict(fees_crypto_usd)} (powinno być zawsze zero)")
+print(f"Przychód w pln za crypto: {sum_dict(przychod_crypto)} zł")
+print(f"Koszt w pln za crypto: {sum_dict(koszty_crypto)} zł")
+print(f"Dochód w pln za crypto: {sum_dict(dochod_crypto)} zł")
+
+print_warning()
