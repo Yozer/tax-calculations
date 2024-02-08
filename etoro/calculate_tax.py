@@ -276,7 +276,6 @@ def process_dividends(incomes, dividend_taxes):
         total_usd = dividend["amount"]
 
         if pos_id not in dividend_taxes:
-            print(f'Unable to find {pos_id} amount {total_usd} on {dividend["date"]} in Dividends sheet. Possibly bug from etoro, if amout is big contact them. Otherwise ignore warning.')
             unmatched_dividend_position_ids.add(pos_id)
             continue
 
