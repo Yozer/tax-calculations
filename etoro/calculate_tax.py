@@ -9,8 +9,8 @@ from helpers import sum_dict, convert_rate, convert_sheet
 
 # pos_types: crypto, stock, dividend, fee
 tax_rate = Decimal("0.19")
+use_t_plus_2 = True
 ignored_transactions = ['Deposit',
-                        'Position closed', # ignore these and use 'Closed position' sheet to get data
                         'Start Copy',
                         'Account balance to mirror',
                         'Mirror balance to account',
@@ -31,60 +31,56 @@ def group_by_pos_id(transactions):
 
     return res
 
-def get_ticker_country(pos_id, transactions, closed_positions):
+def get_ticker_country(position, transactions, closed_positions, dividends):
+    pos_id = position['id']
     if pos_id not in transactions:
         raise Exception(f'Logic error. Unable to find position {pos_id} in transactions sheet')
 
-    first_transaction = next(t for t in transactions[pos_id] if t['Details'].lower() != 'payment caused by dividend')
+    if 'interest' in position:
+        return CfdCountry
+
+    first_transaction = next((t for t in transactions[pos_id] if t['Type'] in ['Position closed', 'Open Position', 'Dividend']))
+    if first_transaction['Asset type'] == 'CFD':
+        return CfdCountry
+    if first_transaction['Asset type'] == 'Crypto':
+        return CryptoCountry
+    if first_transaction['Asset type'] not in ['Stocks', 'ETF']:
+        raise Exception('wtf')
+
     closed_position = closed_positions[pos_id][0] if pos_id in closed_positions else None
     stock_name = None if closed_position is None else closed_position["Action"]
     stock_isin = None if closed_position is None else closed_position["ISIN"]
     stock_symbol = first_transaction['Details']
 
-    if closed_position is not None and closed_position["Type"] == "CFD":
-        return CfdCountry
+    if closed_position is None:
+        dividend = dividends[pos_id][0] if pos_id in dividends else None
+        stock_name = None if dividend is None else dividend["Instrument Name"]
+        stock_isin = None if dividend is None else dividend["ISIN"]
 
     return get_country_code(stock_name, stock_symbol, stock_isin)
-
-def get_position_type(pos_id, transactions, closed_positions):
-    closed_position = closed_positions[pos_id][0]
-    is_cfd = closed_position["Type"] == "CFD"
-
-    country = get_ticker_country(pos_id, transactions, closed_positions)
-    return "crypto" if country == CryptoCountry and not is_cfd else "stock"
 
 def process_interest_payment(transaction):
     pos_id = transaction["Position ID"]
     amount = Decimal(str(transaction["Amount"]))
     date = datetime.strptime(transaction['Date'], excel_date_format)
-    trans = {'id': pos_id, 'open_date': date, 'close_date': date, 'amount': amount, 'country': CfdCountry, "type": 'stock', 'status': 'closed'}
-    trans['open_amount'] = Decimal("0")
-    trans['close_amount'] = amount
+    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": 'stock', 'closed': True, 'equity_change': amount, 'interest': True}
     return trans
 
-def process_rollover_fee(transaction, transactions, closed_positions):
+def process_rollover_fee(transaction):
     amount = Decimal(str(transaction["Amount"]))
     pos_id = transaction["Position ID"]
     date = datetime.strptime(transaction['Date'], excel_date_format)
-    equity_change = Decimal(str(transaction['Realized Equity Change']))
-
-    if amount != equity_change:
-        raise Exception(f'Weird row on position id {transaction["Position ID"]}. Closing')
 
     transaction_details = transaction['Details'].lower()
     transaction_type = transaction['Type'].lower()
     if transaction_details in ['weekend fee', 'over night fee'] or transaction_type == 'sdrt':
-        country = get_ticker_country(pos_id, transactions, closed_positions)
         pos_type = 'fee'
-        if country == CryptoCountry:
-            raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
-    elif transaction_details == 'payment caused by dividend' or transaction_type == 'dividend':
+    elif transaction_type == 'dividend':
         pos_type = 'dividend'
-        country = None
     else:
         raise Exception(f"Unkown fee {transaction_details} for position {transaction['Position ID']}")
 
-    return {'id': pos_id, 'date': date, 'amount': amount, 'country': country, "type": pos_type}
+    return {'id': pos_id, 'date': date, 'amount': amount, "type": pos_type}
 
 def read_dividend_taxes(path):
     workbook = load_workbook(filename=path)
@@ -103,7 +99,7 @@ def read_dividend_taxes(path):
         x["Date of Payment"] = datetime.strptime(str(x["Date of Payment"]), '%d/%m/%Y')
         dividend_taxes[pos_id] += [x]
 
-    return dividend_taxes
+    return (dividend_taxes, sheet)
 
 def read(path):
     workbook = load_workbook(filename=path)
@@ -113,75 +109,80 @@ def read(path):
     grouped_closed_positions = group_by_pos_id(closed_positions)
     entries = []
 
-    for row in closed_positions:
+    # sanity checks... because etoro does more bugs than I
+    has_fatal_errors = False
+    for row  in closed_positions:
+        close_date = datetime.strptime(row['Close Date'], excel_date_format)
+        open_date = datetime.strptime(row['Open Date'], excel_date_format)
         pos_id = row['Position ID']
-        if pos_id is None:
-            continue
-        amount = Decimal(str(row['Amount']).replace(',', '.'))
-        profit = Decimal(str(row['Profit(USD)']).replace(',', '.'))
-        pos_type = get_position_type(pos_id, grouped_transactions, grouped_closed_positions)
+
         is_cfd = row["Type"] == "CFD"
-        is_sell = row["Action"].startswith("Sell")
-
-        trans = {
-            'open_date': datetime.strptime(row['Open Date'], excel_date_format),
-            'close_date': datetime.strptime(row['Close Date'], excel_date_format),
-            'is_cfd': is_cfd,
-            'id': pos_id,
-            'type': pos_type,
-            'status': 'closed',
-            'country': get_ticker_country(pos_id, grouped_transactions, grouped_closed_positions)
-        }
-
+        is_sell = row["Action"].startswith("Sell")        
         if is_sell and not is_cfd:
             raise Exception(f"Not CFD that is sell? Pos id {pos_id}")
 
-        if is_cfd:
-            # dla cfd przychodem będzie sprzedaż z zyskiem
-            if profit > Decimal("0"):
-                trans['open_amount'] = Decimal("0")
-                trans['close_amount'] = profit
-            else:
-                # a kosztem strata
-                trans['open_amount'] = -profit
-                trans['close_amount'] = Decimal("0")
-                trans["open_date"], trans["close_date"] = trans["close_date"], trans["open_date"]
-        else:
-            # dla akcji albo krypto przychodem jest cena sprzedaży a kosztem cena kupna
-            trans["open_amount"] = amount
-            trans["close_amount"] = amount + profit
+        close_activity = next((x for x in grouped_transactions[pos_id] if x['Type'] == 'Position closed'), None)
+        if close_activity is None:
+            print(f'FATAL ERROR: Missing close position, report to ETORO! Position id: {pos_id}')
+            has_fatal_errors = True
 
-        entries.append(trans)
+        if open_date.year == close_date.year:
+            open_activity = next((x for x in grouped_transactions[pos_id] if x['Type'] == 'Open Position'), None)
+            if open_activity is None:
+                print(f'FATAL ERROR: Missing open position, report to ETORO! Position id: {pos_id}')
+                has_fatal_errors = True
+
+    # if has_fatal_errors:
+    #     raise Exception('Aborting due to fatal errors')
     
+    def get_asset_type(asset):
+        if asset in ['Stocks', 'ETF', 'CFD']:
+            return 'stock'
+        elif asset == 'Crypto':
+            return 'crypto'
+        else:
+            raise Exception(f'Failed to parse {asset}')
+
+    open_positions = set()
     for row in transactions:
         pos_id = row['Position ID']
+        date = datetime.strptime(row['Date'], excel_date_format)
+        amount = Decimal(str(row["Amount"]))
+
         if pos_id is None:
             continue
         trans_type = row['Type']
+        asset_type = row['Asset type']
         if trans_type in ['Rollover Fee', 'Dividend', 'SDRT']:
-            entries.append(process_rollover_fee(row, grouped_transactions, grouped_closed_positions))
+            entries.append(process_rollover_fee(row))
         elif trans_type == 'Interest Payment':
             entries.append(process_interest_payment(row))
         elif trans_type == "Open Position":
-            if pos_id not in grouped_closed_positions and get_country_code(None, row["Details"], None, throw=False) == CryptoCountry:
-                print(f"Found crypto that was bought but not sold. Unable to determine CFD. Assuming not. Verify {pos_id}")
-
-                trans = {
-                    'open_date': datetime.strptime(row['Date'], excel_date_format),
-                    'close_date': datetime.strptime(row['Date'], excel_date_format),
-                    'open_amount': Decimal(str(row["Amount"])),
-                    'close_amount': Decimal("0"),
-                    'is_cfd': False,
+            trans = {
+                'date': date,
+                'amount': -amount,
+                'id': pos_id,
+                'closed': False,
+                'type': get_asset_type(asset_type)
+            }
+            open_positions.add(pos_id)
+            entries.append(trans)
+        elif trans_type == "Position closed":
+            profit = Decimal(str(row['Realized Equity Change']))
+            trans = {
+                    'date': date,
                     'id': pos_id,
-                    'type': 'crypto',
-                    'status': 'open',
-                    'country': CryptoCountry
+                    'closed': True,
+                    'type': get_asset_type(asset_type),
+                    'equity_change': profit
                 }
+            if pos_id in grouped_closed_positions and datetime.strptime(grouped_closed_positions[pos_id][0]['Open Date'], excel_date_format).year < 2023:
+                # backward compatility for years <= 2022 where we counted open positions differently
+                trans['amount'] = profit
+            else:
+                trans['amount'] = amount
 
-                entries.append(trans)
-        elif trans_type == "Profit/Loss of Trade":
-            if pos_id not in grouped_closed_positions:
-                raise Exception(f"Closed but not in closed? wtf {pos_id}")
+            entries.append(trans)
         elif trans_type not in ignored_transactions:
             raise Exception(f'Unknown transaction type "{trans_type}" for position {pos_id}')
 
@@ -214,7 +215,7 @@ def read_summary(path):
 
     return (stock_sum, crypto_sum, dividends_sum, fees_sum)
 
-def process_positions(input_positions, typ, unmatched_dividend_position_ids=None, transactions=None, closed_positions=None):
+def process_positions(input_positions, typ, unmatched_dividend_position_ids, transactions, closed_positions, dividends):
     positions = list([x for x in input_positions if x["type"] == typ or (typ == "stock" and x['type'] == "fee")])
     income_usd = {}
     fees_usd = {}
@@ -222,12 +223,13 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids=None
     koszty = {}
     dochod = {}
     negative_dividend_sum = Decimal('0')
+    dividends = group_by_pos_id(dividends)
 
     if unmatched_dividend_position_ids is not None:
         for negative_dividend in [x for x in input_positions if x['type'] == 'dividend' and x['amount'] < 0 and x['id'] in unmatched_dividend_position_ids]:
             # ujemne dywidendy traktujemy jako koszt, ale tylko dla niezmatchowanych wczesniej dywidend z sheetu 'Dividends'
             pos_id = negative_dividend['id']
-            country = get_ticker_country(pos_id, transactions, closed_positions)
+            country = get_ticker_country(negative_dividend, transactions, closed_positions, dividends)
             if country == CryptoCountry:
                 raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
             fee = {'id': pos_id, 'date': negative_dividend['date'], 'amount': negative_dividend['amount'], 'country': country, "type": 'fee'}
@@ -235,7 +237,8 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids=None
             negative_dividend_sum -= negative_dividend['amount']
 
     for pos in positions:
-        country = pos["country"]
+        pos_id = pos['id']
+        country = get_ticker_country(pos, transactions, closed_positions, dividends)
         if country not in income_usd:
             income_usd[country] = Decimal("0")
             fees_usd[country] = Decimal("0")
@@ -243,19 +246,24 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids=None
             koszty[country] = Decimal("0")
             dochod[country] = Decimal("0")
 
+        rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD')
         if pos["type"] == "fee":
-            rate_pln = convert_rate(pos["date"], -pos["amount"], currency='USD')
-            koszty[country] += rate_pln
-            dochod[country] -= rate_pln
             fees_usd[country] += pos["amount"]
+            if rate_pln > 0:
+                # take positive fee for CFD and count it as interest profit
+                przychod[country] += rate_pln
+            else:
+                koszty[country] += -rate_pln
         else:
-            if pos["status"] == "closed":
-                income_usd[country] += pos["close_amount"] - pos["open_amount"]
-            open_rate_pln = convert_rate(pos["open_date"], pos["open_amount"], currency='USD')
-            close_rate_pln = convert_rate(pos["close_date"], pos["close_amount"], currency='USD')
-            przychod[country] += close_rate_pln
-            koszty[country] += open_rate_pln
-            dochod[country] += close_rate_pln - open_rate_pln
+            if rate_pln < 0:
+                koszty[country] += -rate_pln
+            else:
+                przychod[country] += rate_pln
+            if pos['closed']:
+                income_usd[country] += pos["equity_change"]
+
+    for country in dochod.keys():
+        dochod[country] = przychod[country] - koszty[country]
 
     return (sum_dict(income_usd), sum_dict(fees_usd), przychod, koszty, dochod, round(negative_dividend_sum, 2))
 
@@ -324,15 +332,13 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
     warnings = []
 
     if income_dividends_usd != dividends_sum:
-        warnings += f'Dividends check failed. Expected: ${dividends_sum} got {income_dividends_usd}'
+        warnings += [f'Dividends check failed. Expected: ${dividends_sum} got {income_dividends_usd}']
     if income_stock_usd != stock_sum:
-        warnings += f'Stock check failed. Expected: ${stock_sum} got {income_stock_usd}'
+        warnings += [f'Stock check failed. Expected: ${stock_sum} got {income_stock_usd}']
     if fees_stock_usd + negative_dividends != fees_sum:
-        warnings += f'Fees check failed. Expected: ${fees_sum} got {fees_stock_usd + negative_dividends}'
+        warnings += [f'Fees check failed. Expected: ${fees_sum} got {fees_stock_usd + negative_dividends}']
     if income_crypto_usd != crypto_sum:
-        warnings += f'Crypto check failed. Expected: ${crypto_sum} got {income_crypto_usd}'
-    if fees_crypto_usd != 0:
-        warnings += f'Crypto feed check failed. Expected $0.00'
+        warnings += [f'Crypto check failed. Expected: ${crypto_sum} got {income_crypto_usd}']
 
     print()
     print("-------------------------IMPORTANT----------------------------")
@@ -345,7 +351,7 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
 
 fname = 'statement_2023.xlsx'
 entries, grouped_transactions, grouped_closed_positions = read(fname)
-dividend_taxes = read_dividend_taxes(fname)
+dividend_taxes, raw_dividends = read_dividend_taxes(fname)
 
 income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy, unmatched_dividend_position_ids = process_dividends(entries, dividend_taxes)
 podatek_do_zaplaty_dywidendy = podatek_nalezny_dywidendy - podatek_zaplacony_dywidendy
@@ -359,7 +365,7 @@ print(f"Podatek należny: {podatek_nalezny_dywidendy} zł")
 print(f"Podatek zapłacony za granicą: {podatek_zaplacony_dywidendy} zł")
 print(f"Podatek za dywidendy: {podatek_do_zaplaty_dywidendy} zł")
 
-income_stock_usd, fees_stock_usd, przychod_stock, koszty_stock, dochod_stock, negative_dividend_sum = process_positions(entries, 'stock', unmatched_dividend_position_ids, grouped_transactions, grouped_closed_positions)
+income_stock_usd, fees_stock_usd, przychod_stock, koszty_stock, dochod_stock, negative_dividend_sum = process_positions(entries, 'stock', unmatched_dividend_position_ids, grouped_transactions, grouped_closed_positions, raw_dividends)
 print()
 print("Stocks na Pit-38 sekcja C jako inne przychody. Koniecznie z załącznikiem PIT/ZG")
 print(f"Dochód $ za stocks: ${income_stock_usd} (w summary suma 'CFDs (Profit or Loss)' + 'Stocks (Profit or Loss)' + 'ETFs (Profit or Loss)' + 'Total Interest payments by eToro EU'")
@@ -367,9 +373,10 @@ print(f"Koszty $ za stocks: ${fees_stock_usd} (w tym negatywne dywidendy: ${nega
 print(f"Przychód w pln za stocks: {sum_dict(przychod_stock)} zł")
 print(f"Koszt w pln za stocks: {sum_dict(koszty_stock)} zł")
 print(f"Dochód w pln za stocks: {sum_dict(dochod_stock)} zł")
-print(f'Dochód per kraj (na PIT/ZG wpisujemy tylko dodatnie): {dict([(x, str(y)) for x, y in dochod_stock.items()])}')
+print(f"Podatek: {max(round(sum_dict(dochod_stock) * tax_rate, 0), 0)} zł")
+print(f'Dochód per kraj (na PIT/ZG wpisujemy tylko dodatnie): {dict([(x, str(y)) for x, y in dochod_stock.items() if y > 0])}')
 
-income_crypto_usd, fees_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto, _ = process_positions(entries, 'crypto')
+income_crypto_usd, fees_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto, _ = process_positions(entries, 'crypto', None, grouped_transactions, grouped_closed_positions, raw_dividends)
 print()
 print("Crypto rozliczamy na PIT-38 sekcja E")
 print(f"Dochód $ za crypto: ${income_crypto_usd} (w summary 'Crypto (Profit or Loss)')")
@@ -377,5 +384,6 @@ print(f"Koszty $ za crypto: ${fees_crypto_usd} (powinno być zawsze zero)")
 print(f"Przychód w pln za crypto: {sum_dict(przychod_crypto)} zł")
 print(f"Koszt w pln za crypto: {sum_dict(koszty_crypto)} zł")
 print(f"Dochód w pln za crypto: {sum_dict(dochod_crypto)} zł")
+print(f"Podatek: {max(round(sum_dict(dochod_crypto) * tax_rate, 0), 0)} zł")
 
 do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, negative_dividend_sum, income_crypto_usd, fees_crypto_usd)

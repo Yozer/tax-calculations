@@ -30,7 +30,7 @@ def get_rate(currency, asOfDate: datetime):
 
     return rate
 
-def convert_rate(asOfDate, amount, currency):
+def convert_rate(asOfDate, amount, currency) -> Decimal:
     return amount if currency == 'PLN' else (get_rate(currency, asOfDate) * amount)
 
 def convert_sheet(sheet):
