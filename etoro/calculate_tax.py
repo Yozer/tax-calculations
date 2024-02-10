@@ -177,7 +177,7 @@ def read(path):
         amount = parse_decimal(row["Amount"])
         trans_type = row['Type']
         asset_type = row['Asset type']
-        trans = { 'date': date, 'id': pos_id }
+        trans = { 'id': pos_id }
 
         if trans_type in ['Rollover Fee', 'Dividend', 'SDRT']:
             entries.append(process_rollover_fee(row))
@@ -190,6 +190,7 @@ def read(path):
             if amount <= 0:
                 raise Exception(f'Negative crypto buy? {amount}')
             trans['amount'] = -amount
+            trans['date'] = date
             trans['type'] = get_asset_type(asset_type)
             trans['equity_change'] = profit = parse_decimal(row['Realized Equity Change'])
             entries.append(trans)
@@ -197,7 +198,9 @@ def read(path):
             profit = parse_decimal(row['Realized Equity Change'])
             parsed_asset_type = get_asset_type(asset_type)
             closed_position = grouped_closed_positions[pos_id][0]
-            if asset_type == 'CFD':
+            is_cfd = asset_type == 'CFD'
+
+            if asset_type != StockType or is_cfd:
                 open_date = parse_date(closed_position['Open Date'])
                 close_date = parse_date(closed_position['Close Date'])
             else:
@@ -214,10 +217,10 @@ def read(path):
                 raise Exception(f'Negative amount {pos_id}')
 
             if parsed_asset_type == CryptoType:
-                trans['date'] = open_date
+                trans['date'] = close_date
                 trans['amount'] = amount
             elif parsed_asset_type == StockType:
-                trans['is_cfd'] = asset_type == 'CFD'
+                trans['is_cfd'] = is_cfd
 
                 if derive_open_close_rates and not trans['is_cfd']:
                     units = parse_decimal(closed_position['Units'])
