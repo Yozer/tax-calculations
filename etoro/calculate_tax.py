@@ -13,6 +13,7 @@ StockType = 'stock'
 DividendType = 'dividend'
 FeeType = 'fee'
 InterestType = 'interest'
+AdjustmentType = 'adjustment'
 
 tax_rate = Decimal("0.19")
 use_t_plus_2 = True
@@ -90,7 +91,14 @@ def process_interest_payment(transaction):
     pos_id = transaction["Position ID"]
     amount = parse_decimal(transaction["Amount"])
     date = parse_date(transaction['Date'])
-    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": InterestType, 'equity_change': amount, 'interest': True}
+    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": InterestType, 'equity_change': amount}
+    return trans
+
+def process_adjustment(transaction):
+    pos_id = transaction["Position ID"]
+    amount = parse_decimal(transaction["Amount"])
+    date = parse_date(transaction['Date'])
+    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": AdjustmentType, 'equity_change': amount}
     return trans
 
 def process_rollover_fee(transaction):
@@ -152,9 +160,9 @@ def read(path):
             raise Exception(f"Not CFD that is sell? Pos id {pos_id}")
 
         if open_date.year == close_date.year:
-            open_activity = next((x for x in grouped_transactions[pos_id] if x['Type'] == 'Open Position'), None)
+            open_activity = next((x for x in grouped_transactions[pos_id] if x['Type'] == 'Position closed'), None)
             if open_activity is None:
-                print(f'FATAL ERROR: Missing open position, report to ETORO! Position id: {pos_id}')
+                print(f'FATAL ERROR: Missing closed position, report to ETORO! Position id: {pos_id}')
                 has_fatal_errors = True
 
     # if has_fatal_errors:
@@ -183,6 +191,8 @@ def read(path):
             entries.append(process_rollover_fee(row))
         elif trans_type == 'Interest Payment':
             entries.append(process_interest_payment(row))
+        elif trans_type == 'Adjustment':
+            entries.append(process_adjustment(row))
         elif trans_type == "Open Position":
             # skip as it's taxable only for crypto
             if get_asset_type(asset_type) != CryptoType:
@@ -251,6 +261,7 @@ def read_summary(path):
     dividends_sum = Decimal('0')
     fees_sum = Decimal('0')
     interest_sum = Decimal('0')
+    refunds_sum = Decimal('0')
 
     for row in summary:
         amount = parse_decimal(row['Amount\n in (USD)'])
@@ -265,7 +276,9 @@ def read_summary(path):
             dividends_sum += amount
         elif row['Name'] in ['Fees', 'SDRT Charge']:
             fees_sum += amount
-        elif row['Name'] in ['Total Return Swaps (Profit or Loss)', 'Income from Refunds', 'Income from Airdrops', 'Income from Staking', 'Income from Corporate Actions']:
+        elif row['Name'] == 'Income from Refunds':
+            refunds_sum += amount
+        elif row['Name'] in ['Total Return Swaps (Profit or Loss)', 'Income from Airdrops', 'Income from Staking', 'Income from Corporate Actions']:
             if amount != 0:
                 raise Exception(f'Unupported: non-zero value for {row["Name"]} in Financial Summary')
         elif row['Name'] in ['Commissions (spread) on CFDs', 'Commissions (spread) on Crypto', 'Commissions (spread) on TRS', 'Commissions (spread) on Stocks', 'Commissions (spread) on ETFs']:
@@ -273,17 +286,18 @@ def read_summary(path):
         else:
             raise Exception(f'Unupported: unknown column in {row["Name"]} in Financial Summary')
 
-    return (stock_sum, crypto_sum, dividends_sum, fees_sum, interest_sum)
+    return (stock_sum, crypto_sum, dividends_sum, fees_sum, interest_sum, refunds_sum)
 
 def process_positions(input_positions, typ, unmatched_dividend_position_ids, transactions, closed_positions, dividends):
-    positions = list([x for x in input_positions if x["type"] == typ or (typ == StockType and x['type'] == FeeType)])
-    income_usd = {}
-    fees_usd = {}
+    positions = list([x for x in input_positions if x["type"] == typ or (typ == StockType and x['type'] in [FeeType, AdjustmentType])])
+    income_usd = Decimal('0')
+    fees_usd = Decimal('0')
     przychod = {}
     koszty = {}
     dochod = {}
     negative_dividend_sum = Decimal('0')
     dividends = group_by_pos_id(dividends)
+    refunds_sum_usd = Decimal('0')
 
     if unmatched_dividend_position_ids is not None:
         for negative_dividend in [x for x in input_positions if x['type'] == DividendType and x['amount'] < 0 and x['id'] in unmatched_dividend_position_ids]:
@@ -299,16 +313,14 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
     for pos in positions:
         pos_id = pos['id']
         country = get_ticker_country(pos, transactions, closed_positions, dividends)
-        if country not in income_usd:
-            income_usd[country] = Decimal("0")
-            fees_usd[country] = Decimal("0")
+        if country not in przychod:
             przychod[country] = Decimal("0")
             koszty[country] = Decimal("0")
             dochod[country] = Decimal("0")
 
         if pos["type"] == FeeType:
             rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD')
-            fees_usd[country] += pos["amount"]
+            fees_usd += pos["amount"]
             if rate_pln > 0:
                 # take positive fee for CFD and count it as interest profit
                 przychod[country] += rate_pln
@@ -323,7 +335,7 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
                 # negative, we bought crypto
                 koszty[country] += -rate_pln
 
-            income_usd[country] += pos["equity_change"]
+            income_usd += pos["equity_change"]
         elif pos['type'] == StockType:
             if pos['is_cfd']:
                 profit_pln = convert_rate(pos["close_date"], pos["equity_change"], currency='USD')
@@ -337,14 +349,23 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
                 koszty[country] += open_rate_pln
                 przychod[country] += close_rate_pln
 
-            income_usd[country] += pos["equity_change"]
+            income_usd += pos["equity_change"]
+        elif pos['type'] == AdjustmentType:
+            # etoro made a mistake and either took from us or gave us
+            rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD')
+            if rate_pln > 0:
+                przychod[country] += rate_pln
+            else:
+                koszty[country] += -rate_pln
+
+            refunds_sum_usd += pos['amount']
         else:
             raise Exception(f'Unknown {pos["type"]} for {pos_id}')
 
     for country in dochod.keys():
         dochod[country] = przychod[country] - koszty[country]
 
-    return (sum_dict(income_usd), sum_dict(fees_usd), przychod, koszty, dochod, round(negative_dividend_sum, 2))
+    return (income_usd, fees_usd, przychod, koszty, dochod, round(negative_dividend_sum, 2), refunds_sum_usd)
 
 def process_dividends(incomes, dividend_taxes):
     dividends = [x for x in incomes if x["type"] == 'dividend']
@@ -406,8 +427,8 @@ def process_dividends(incomes, dividend_taxes):
     podatek_zaplacony_dywidendy = round(podatek_zaplacony_dywidendy)
     return (income_dividends_usd, income_dividends_usd_brutto, przychod_dywidendy, podstawa_dywidendy, podatek_nalezny_dywidendy, podatek_zaplacony_dywidendy, unmatched_dividend_position_ids)
 
-def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, negative_dividends, income_crypto_usd, fees_crypto_usd):
-    stock_sum, crypto_sum, dividends_sum, fees_sum, interest_sum = read_summary(fname)
+def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, negative_dividends, income_crypto_usd, fees_crypto_usd, refunds_sum_usd):
+    stock_sum, crypto_sum, dividends_sum, fees_sum, interest_sum, refunds_sum = read_summary(fname)
     warnings = []
 
     if income_dividends_usd != dividends_sum:
@@ -418,6 +439,10 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
         warnings += [f'Fees check failed. Expected: ${fees_sum} got {fees_stock_usd + negative_dividends}']
     if income_crypto_usd != crypto_sum:
         warnings += [f'Crypto check failed. Expected: ${crypto_sum} got {income_crypto_usd}']
+    if fees_crypto_usd != Decimal('0'):
+        warnings += [f'Crypto check failed. Expected: feed to be 0']
+    if refunds_sum != refunds_sum_usd:
+        warnings += [f'Incorrect refund sum. Expected ${refunds_sum} got ${refunds_sum_usd}']
 
     print()
     print("-------------------------IMPORTANT----------------------------")
@@ -428,7 +453,7 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
     print("-------------------------IMPORTANT----------------------------")
     print()
 
-fname = 'test2023.xlsx'
+fname = 'statement_2023.xlsx'
 entries, grouped_transactions, grouped_closed_positions = read(fname)
 dividend_taxes, raw_dividends = read_dividend_taxes(fname)
 
@@ -444,7 +469,7 @@ print(f"Podatek należny: {podatek_nalezny_dywidendy} zł")
 print(f"Podatek zapłacony za granicą: {podatek_zaplacony_dywidendy} zł")
 print(f"Podatek za dywidendy: {podatek_do_zaplaty_dywidendy} zł")
 
-income_stock_usd, fees_stock_usd, przychod_stock, koszty_stock, dochod_stock, negative_dividend_sum = process_positions(entries, 'stock', unmatched_dividend_position_ids, grouped_transactions, grouped_closed_positions, raw_dividends)
+income_stock_usd, fees_stock_usd, przychod_stock, koszty_stock, dochod_stock, negative_dividend_sum, refunds_sum_usd = process_positions(entries, 'stock', unmatched_dividend_position_ids, grouped_transactions, grouped_closed_positions, raw_dividends)
 print()
 print("Stocks na Pit-38 sekcja C jako inne przychody. Koniecznie z załącznikiem PIT/ZG")
 print(f"Dochód $ za stocks: ${income_stock_usd} (w summary suma 'CFDs (Profit or Loss)' + 'Stocks (Profit or Loss)' + 'ETFs (Profit or Loss)')")
@@ -455,7 +480,7 @@ print(f"Dochód w pln za stocks: {sum_dict(dochod_stock)} zł")
 print(f"Podatek: {max(round(sum_dict(dochod_stock) * tax_rate, 0), 0)} zł")
 print(f'Dochód per kraj (na PIT/ZG wpisujemy tylko dodatnie): {dict([(x, str(y)) for x, y in dochod_stock.items() if y > 0])}')
 
-income_crypto_usd, fees_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto, _ = process_positions(entries, 'crypto', None, grouped_transactions, grouped_closed_positions, raw_dividends)
+income_crypto_usd, fees_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto, _, _ = process_positions(entries, 'crypto', None, grouped_transactions, grouped_closed_positions, raw_dividends)
 print()
 print("Crypto rozliczamy na PIT-38 sekcja E")
 print(f"Dochód $ za crypto: ${income_crypto_usd} (w summary 'Crypto (Profit or Loss)')")
@@ -465,4 +490,4 @@ print(f"Koszt w pln za crypto: {sum_dict(koszty_crypto)} zł")
 print(f"Dochód w pln za crypto: {sum_dict(dochod_crypto)} zł")
 print(f"Podatek: {max(round(sum_dict(dochod_crypto) * tax_rate, 0), 0)} zł")
 
-do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, negative_dividend_sum, income_crypto_usd, fees_crypto_usd)
+do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, negative_dividend_sum, income_crypto_usd, fees_crypto_usd, refunds_sum_usd)
