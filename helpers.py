@@ -21,11 +21,12 @@ def fetch_rates(currency:str, year:int):
 def get_rate(currency, asOfDate: datetime):
     rates = fetch_rates(currency, asOfDate.year)
     asOfDate = asOfDate.date()
-    asOfDates = [asOfDate - timedelta(days=i) for i in range(1, 5)]
+    asOfDates = [asOfDate - timedelta(days=i) for i in range(1, 7)]
     rate =  next((rates[day] for day in asOfDates if day in rates), None)
     if rate is None:
         rates = fetch_rates(currency, asOfDate.year - 1)
-        asOfDates = [asOfDate - timedelta(days=i) for i in range(0, 4)]
+        asOfDate = datetime(asOfDate.year, 12, 31)
+        asOfDates = [asOfDate - timedelta(days=i) for i in range(0, 6)]
         rate =  next((rates[day] for day in asOfDates if day in rates), None)
         if rate is None:
             raise Exception(f"Failed to get rate for {asOfDate} and {currency}")
