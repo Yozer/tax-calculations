@@ -200,7 +200,7 @@ def read(path):
             closed_position = grouped_closed_positions[pos_id][0]
             is_cfd = asset_type == 'CFD'
 
-            if asset_type != StockType or is_cfd:
+            if parsed_asset_type != StockType or is_cfd:
                 open_date = parse_date(closed_position['Open Date'])
                 close_date = parse_date(closed_position['Close Date'])
             else:
