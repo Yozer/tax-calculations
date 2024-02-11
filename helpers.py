@@ -25,7 +25,7 @@ def get_rate(currency, asOfDate: datetime):
     rate =  next((rates[day] for day in asOfDates if day in rates), None)
     if rate is None:
         rates = fetch_rates(currency, asOfDate.year - 1)
-        asOfDate = datetime(asOfDate.year - 1, 12, 31)
+        asOfDate = datetime(asOfDate.year - 1, 12, 31).date()
         asOfDates = [asOfDate - timedelta(days=i) for i in range(0, 6)]
         rate =  next((rates[day] for day in asOfDates if day in rates), None)
         if rate is None:
