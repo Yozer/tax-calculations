@@ -58,17 +58,14 @@ def get_ticker_country(position, transactions, closed_positions, dividends):
     if pos_id not in transactions:
         raise Exception(f'Logic error. Unable to find position {pos_id} in transactions sheet')
 
-    if 'interest' in position:
+    if position['type'] == CryptoType:
+        return CryptoCountry
+    elif position['is_cfd']:
         return CfdCountry
+    elif position['type'] not in [StockType, FeeType]:
+        raise Exception(f'Unexpected position type {position["type"]} for {pos_id}')
 
     first_transaction = next((t for t in transactions[pos_id] if t['Type'] in ['Position closed', 'Open Position', 'Dividend']))
-    if first_transaction['Asset type'] == 'CFD':
-        return CfdCountry
-    if first_transaction['Asset type'] == 'Crypto':
-        return CryptoCountry
-    if first_transaction['Asset type'] not in ['Stocks', 'ETF']:
-        raise Exception('wtf')
-
     closed_position = closed_positions[pos_id][0] if pos_id in closed_positions else None
     stock_name = None if closed_position is None else closed_position["Action"]
     stock_isin = None if closed_position is None else closed_position["ISIN"]
@@ -87,18 +84,23 @@ def parse_decimal(r):
 def parse_date(r):
     return datetime.strptime(r, excel_date_format)
 
+def is_asset_cfd(r):
+    if r['Asset type'] in ['', None]:
+        raise Exception(f'Empty asset type for {r["pos_id"]}')
+    return r['Asset type'] == 'CFD'
+
 def process_interest_payment(transaction):
     pos_id = transaction["Position ID"]
     amount = parse_decimal(transaction["Amount"])
     date = parse_date(transaction['Date'])
-    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": InterestType, 'equity_change': amount}
+    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": InterestType, 'equity_change': amount, "is_cfd": True}
     return trans
 
 def process_adjustment(transaction):
     pos_id = transaction["Position ID"]
     amount = parse_decimal(transaction["Amount"])
     date = parse_date(transaction['Date'])
-    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": AdjustmentType, 'equity_change': amount}
+    trans = {'id': pos_id, 'date': date, 'amount': amount, "type": AdjustmentType, 'equity_change': amount, "is_cfd": True}
     return trans
 
 def process_rollover_fee(transaction):
@@ -115,7 +117,7 @@ def process_rollover_fee(transaction):
     else:
         raise Exception(f"Unkown fee {transaction_details} for position {transaction['Position ID']}")
 
-    return {'id': pos_id, 'date': date, 'amount': amount, "type": pos_type}
+    return {'id': pos_id, 'date': date, 'amount': amount, "type": pos_type, "is_cfd": is_asset_cfd(transaction)}
 
 def read_dividend_taxes(path):
     workbook = load_workbook(filename=path)
@@ -135,6 +137,15 @@ def read_dividend_taxes(path):
         dividend_taxes[pos_id] += [x]
 
     return (dividend_taxes, sheet)
+
+def get_asset_type(asset):
+    asset = asset['Asset type']
+    if asset in ['Stocks', 'ETF', 'CFD']:
+        return StockType
+    elif asset == 'Crypto':
+        return CryptoType
+    else:
+        raise Exception(f'Failed to parse {asset}')
 
 def read(path):
     workbook = load_workbook(filename=path)
@@ -165,16 +176,8 @@ def read(path):
                 print(f'FATAL ERROR: Missing closed position, report to ETORO! Position id: {pos_id}')
                 has_fatal_errors = True
 
-    # if has_fatal_errors:
-    #     raise Exception('Aborting due to fatal errors')
-    
-    def get_asset_type(asset):
-        if asset in ['Stocks', 'ETF', 'CFD']:
-            return StockType
-        elif asset == 'Crypto':
-            return CryptoType
-        else:
-            raise Exception(f'Failed to parse {asset}')
+    if has_fatal_errors:
+        raise Exception('Aborting due to fatal errors')
 
     for row in transactions:
         pos_id = row['Position ID']
@@ -195,18 +198,19 @@ def read(path):
             entries.append(process_adjustment(row))
         elif trans_type == "Open Position":
             # skip as it's taxable only for crypto
-            if get_asset_type(asset_type) != CryptoType:
+            if get_asset_type(row) != CryptoType:
                 continue
             if amount <= 0:
                 raise Exception(f'Negative crypto buy? {amount}')
             trans['amount'] = -amount
             trans['date'] = date
-            trans['type'] = get_asset_type(asset_type)
+            trans['type'] = CryptoType
+            trans['is_cfd'] = False
             trans['equity_change'] = profit = parse_decimal(row['Realized Equity Change'])
             entries.append(trans)
         elif trans_type == "Position closed":
             profit = parse_decimal(row['Realized Equity Change'])
-            parsed_asset_type = get_asset_type(asset_type)
+            parsed_asset_type = get_asset_type(row)
             closed_position = grouped_closed_positions[pos_id][0]
             is_cfd = asset_type == 'CFD'
 
@@ -229,18 +233,11 @@ def read(path):
             if parsed_asset_type == CryptoType:
                 trans['date'] = close_date
                 trans['amount'] = amount
+                trans['is_cfd'] = False
             elif parsed_asset_type == StockType:
                 trans['is_cfd'] = is_cfd
-
-                if derive_open_close_rates and not trans['is_cfd']:
-                    units = parse_decimal(closed_position['Units'])
-                    open_rate = open_amount / units
-                    close_rate = (open_amount - profit) / units
-                    trans['open_amount'] = open_rate * units
-                    trans['close_amount'] = close_rate * units
-                else:
-                    trans['open_amount'] = open_amount
-                    trans['close_amount'] = amount
+                trans['open_amount'] = open_amount
+                trans['close_amount'] = amount
                 trans['open_date'] = open_date
                 trans['close_date'] = close_date
             else:
@@ -306,7 +303,7 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
             country = get_ticker_country(negative_dividend, transactions, closed_positions, dividends)
             if country == CryptoCountry:
                 raise Exception(f"Found a rollover fee for crypto position {pos_id}. Should be marked as cfd?")
-            fee = {'id': pos_id, 'date': negative_dividend['date'], 'amount': negative_dividend['amount'], 'country': country, "type": FeeType}
+            fee = {'id': pos_id, 'date': negative_dividend['date'], 'amount': negative_dividend['amount'], 'country': country, "type": FeeType, 'is_cfd': negative_dividend['is_cfd']}
             positions.append(fee)
             negative_dividend_sum -= negative_dividend['amount']
 
