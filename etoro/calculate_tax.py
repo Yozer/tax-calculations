@@ -17,7 +17,6 @@ AdjustmentType = 'adjustment'
 
 tax_rate = Decimal("0.19")
 use_t_plus_2 = True
-derive_open_close_rates = False
 ignored_transactions = ['Deposit',
                         'Start Copy',
                         'Account balance to mirror',
