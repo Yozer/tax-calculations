@@ -16,7 +16,8 @@ InterestType = 'interest'
 AdjustmentType = 'adjustment'
 
 tax_rate = Decimal("0.19")
-use_t_plus_2 = True
+use_t_plus_2 = False
+year = 2023
 ignored_transactions = ['Deposit',
                         'Start Copy',
                         'Account balance to mirror',
@@ -133,6 +134,9 @@ def read_dividend_taxes(path):
         x["Net Dividend Received (USD)"] = parse_decimal(x["Net Dividend Received (USD)"])
         x["Withholding Tax Amount (USD)"] = parse_decimal(x["Withholding Tax Amount (USD)"])
         x["Date of Payment"] = datetime.strptime(str(x["Date of Payment"]), '%d/%m/%Y')
+
+        if x["Date of Payment"].year != year:
+            raise Exception('Invalid year found in excel')
         dividend_taxes[pos_id] += [x]
 
     return (dividend_taxes, sheet)
@@ -188,6 +192,8 @@ def read(path):
         trans_type = row['Type']
         asset_type = row['Asset type']
         trans = { 'id': pos_id }
+        if date.year != year:
+            raise Exception('Invalid year found in excel')
 
         if trans_type in ['Rollover Fee', 'Dividend', 'SDRT']:
             entries.append(process_rollover_fee(row))

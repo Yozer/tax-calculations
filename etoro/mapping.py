@@ -9,7 +9,7 @@ CfdCountry = 'Cypr'
 instruments_by_full_symbol = None
 instruments_by_display_name = None
 eur_exchange_suffixes = ['mi', 'pa']
-manual_mapping = {'UBSG/CHF': 'Szwajcaria'}
+manual_mapping = {'UBSG/CHF': 'Szwajcaria', 'ANA/EUR': 'Hiszpania', 'LQDE/USD': 'Irlandia', 'IBE/EUR': 'Hiszpania'}
 etoro_cache = {}
 
 def ask_etoro_cached(stock_symbol):
@@ -70,7 +70,7 @@ def get_country_code(stock_name, stock_symbol, isin_code, throw=True):
         countries = set([mapping[x] for x in countries if x != None and x != '' and x in mapping])
     if len(countries) == 0:
         if throw:
-            raise Exception(f'Unknown country for ISIN: "{isin_code}" stock name: "{stock_name}" stock symbol: "{stock_symbol}"')
+            raise Exception(f'Unknown country for ISIN: "{isin_code}" stock name: "{stock_name}" stock symbol: "{stock_symbol_original}"')
         else:
             return None
 
