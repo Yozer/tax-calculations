@@ -31,12 +31,12 @@ def calculate_tax(path):
         date = row['Date / Time (UTC)'] if isinstance(row['Date / Time (UTC)'], datetime) else datetime.strptime(row['Date / Time (UTC)'], '%Y-%m-%d %H:%M:%S').astimezone(warsaw_timezone)
 
         if trans_type == 'Withdraw Exchanged':
-            if output_currency is 'EUR' or 'USD':
+            if output_currency == 'EUR' or 'USD':
                 income += convert_rate(date, amount, output_currency)
             else:
                 raise Exception("invalid output currency")
         elif trans_type == 'Exchange Deposited On':
-            if input_currency is 'EUR' or 'USD':
+            if input_currency == 'EUR' or 'USD':
                 cost += convert_rate(date, amount, input_currency)
             else:
                 raise Exception("invalid output currency")
