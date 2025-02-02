@@ -1,14 +1,11 @@
 # Binance
 ## Export: Wallet -> Transaction history -> Generate all statements for all coins and transactions
-You have to convert file from csv to xlsx (or make a PR with csv support).
-Only supports EUR/GBP/USD.
+Only supports EUR/GBP/USD to any fiat.
 
-# Coinbase NOT IMPLEMENTED
-## Export: Account -> Reports -> All assets and All transactions to CSV. Then convert it to xlsx.
+# Coinbase
+## Export: Account -> Statements -> Generate Account Report. All Accounts, CSV format.
 Remove header from csv before converting
-
-# Coinbase PRO
-## Export: Account -> Statements -> Generate Account Report. All Accounts, CSV format. Then convert it to xlsx.
+Only supports EUR, USDT and USDC.
 
 # Kraken
 ## Export: History -> Export -> Ledgers with All fields. Then convert it to xlsx.
