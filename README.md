@@ -7,5 +7,6 @@
 - coinbase pro
 - kraken
 - bittrex
+- nexo
 
 Open relevant folder for more info
