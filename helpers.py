@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from dateutil import tz
-import requests
+import requests, csv
 
 warsaw_timezone = tz.gettz('Europe/Warsaw')
 fiat_currencies = ['EUR', 'USD', 'GBP']
@@ -43,6 +43,15 @@ def convert_sheet(sheet):
     header = [(sheet.cell(row=1, column=col_index).value, col_index) for col_index in range(1, cols + 1)]
     get_row = lambda row: dict([(column, sheet.cell(row, col_index).value) for (column, col_index) in header])
     return [get_row(idx) for idx in range(2, rows + 1)]
+
+def read_csv(file_name):
+    transactions = []
+    with open(file_name, 'r', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            transactions.append(row)
+
+    return transactions
 
 def sum_dict(d):
     return sum([v for k,v in d.items()])
