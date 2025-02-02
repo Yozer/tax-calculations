@@ -8,6 +8,7 @@ from helpers import convert_rate, convert_sheet
 import re
 
 income_types = ["Interest received", "Interest received from loan repurchase", "Late fees received", "Delayed interest income on transit rebuy", "Interest received from pending payments"]
+ignored_typed = ['Withdrawal', 'Principal received from loan repurchase', 'Principal received from repurchase of small loan parts']
 cost_types = []
 witholding_tax = Decimal("0.05")
 polish_tax = Decimal("0.19")
@@ -47,6 +48,8 @@ def process_transactions(path):
                 withloding_taxes += convert_rate(date, amount, row['Currency'])
             elif trans_type in cost_types:
                 trans_group.append({'isin_loan': isin_loan, 'type': 'fee', 'date': date, 'amount': amount, 'currency':  row['Currency']})
+            elif trans_type in ignored_typed:
+                continue
             else:
                 print(f"Unknown transaction type {trans_type}")
                 exit(1)
