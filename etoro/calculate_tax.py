@@ -13,15 +13,17 @@ StockType = 'stock'
 DividendType = 'dividend'
 FeeType = 'fee'
 InterestType = 'interest'
-AdjustmentType = 'adjustment'
+AdjustmentType = 'adjustment' # etoro made a mistake and either took from us or gave us
+RefundType = 'refund'
 
 tax_rate = Decimal("0.19")
 use_t_plus_2 = False
-year = 2023
+year = 2024
 ignored_transactions = ['Deposit',
                         'Start Copy',
                         'Account balance to mirror',
                         'Mirror balance to account',
+                        'Withdraw Request',
                         'Stop Copy',
                         'Edit Stop Loss',
                         'corp action: Split',
@@ -110,10 +112,14 @@ def process_rollover_fee(transaction):
 
     transaction_details = transaction['Details'].lower()
     transaction_type = transaction['Type'].lower()
-    if transaction_details in ['weekend fee', 'over night fee'] or transaction_type == 'sdrt':
+    if (transaction_type == 'overnight fee' and transaction_details in ['weekend fee', 'daily']) or transaction_type == 'sdrt':
         pos_type = FeeType
     elif transaction_type == 'dividend':
         pos_type = DividendType
+    elif (transaction_type == 'overnight refund' and transaction_details == 'daily') or (transaction_type == 'weekend refund' and transaction_details == 'weekend fee'):
+        if amount < 0:
+            raise Exception(f"Negative refund {transaction_details} for position {transaction['Position ID']}")
+        pos_type = RefundType
     else:
         raise Exception(f"Unkown fee {transaction_details} for position {transaction['Position ID']}")
 
@@ -195,12 +201,15 @@ def read(path):
         if date.year != year:
             raise Exception('Invalid year found in excel')
 
-        if trans_type in ['Rollover Fee', 'Dividend', 'SDRT']:
+        if trans_type in ['Overnight fee', 'Overnight refund', 'Weekend refund', 'Dividend', 'SDRT']:
             entries.append(process_rollover_fee(row))
         elif trans_type == 'Interest Payment':
             entries.append(process_interest_payment(row))
         elif trans_type == 'Adjustment':
             entries.append(process_adjustment(row))
+        elif trans_type in ['Withdraw Fee', 'Withdrawal Conversion Fee', 'Deposit Conversion Fee']:
+            if amount != 0:
+                raise Exception(f'Unsupported withdraw fee/withdrawal conversion fee/depsit conversion fee {amount}')
         elif trans_type == "Open Position":
             # skip as it's taxable only for crypto
             if get_asset_type(row) != CryptoType:
@@ -233,7 +242,7 @@ def read(path):
             if len(grouped_closed_positions[pos_id]) > 1:
                 raise Exception(f'More than one closed position for {pos_id}')
             if amount < 0 or open_amount < 0:
-                raise Exception(f'Negative amount {pos_id}')
+                raise Exception(f'Negative amount for position id {pos_id}') # TODO handle losing more than invested, e.g. leverage
 
             if parsed_asset_type == CryptoType:
                 trans['date'] = close_date
@@ -352,8 +361,7 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
                 przychod[country] += close_rate_pln
 
             income_usd += pos["equity_change"]
-        elif pos['type'] == AdjustmentType:
-            # etoro made a mistake and either took from us or gave us
+        elif pos['type'] in [AdjustmentType, RefundType]:
             rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD')
             if rate_pln > 0:
                 przychod[country] += rate_pln
@@ -467,7 +475,7 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
     print("-------------------------IMPORTANT----------------------------")
     print()
 
-fname = 'statement_2023.xlsx'
+fname = 'statement_2024.xlsx'
 entries, grouped_transactions, grouped_closed_positions = read(fname)
 dividend_taxes, raw_dividends = read_dividend_taxes(fname)
 
