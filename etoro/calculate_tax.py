@@ -14,7 +14,7 @@ DividendType = 'dividend'
 FeeType = 'fee'
 InterestType = 'interest'
 AdjustmentType = 'adjustment' # etoro made a mistake and either took from us or gave us
-IndexAdjustmentType = 'index-adjustment' # etoro made a mistake and either took from us or gave us
+IndexAdjustmentType = 'index-adjustment' # no idea yet what it is
 RefundType = 'refund'
 
 tax_rate = Decimal("0.19")
