@@ -205,7 +205,7 @@ def read(path):
             entries.append(process_rollover_fee(row))
         elif trans_type == 'Interest Payment':
             entries.append(process_interest_payment(row))
-        elif trans_type == 'Adjustment':
+        elif trans_type in ['Adjustment', 'Index price adjustment']:
             entries.append(process_adjustment(row))
         elif trans_type in ['Withdraw Fee', 'Withdrawal Conversion Fee', 'Deposit Conversion Fee']:
             if amount != 0:
@@ -241,8 +241,10 @@ def read(path):
 
             if len(grouped_closed_positions[pos_id]) > 1:
                 raise Exception(f'More than one closed position for {pos_id}')
-            if amount < 0 or open_amount < 0:
-                raise Exception(f'Negative amount for position id {pos_id}') # TODO handle losing more than invested, e.g. leverage
+            if open_amount < 0:
+                raise Exception(f'Negative amount for position id {pos_id}')
+            if amount < 0: # your dumbass lost more than invested, leverage = bad
+                print("Check the transaction with negative amount for position id {pos_id}")
 
             if parsed_asset_type == CryptoType:
                 trans['date'] = close_date
