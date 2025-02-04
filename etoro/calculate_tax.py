@@ -467,7 +467,7 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
 
     if income_dividends_usd != dividends_sum:
         warnings += [f'Dividends check failed. Expected: ${dividends_sum} got {income_dividends_usd}']
-    if income_stock_usd != stock_sum:
+    if income_stock_usd + refunds_sum_usd != stock_sum:
         warnings += [f'Stock check failed. Expected: ${stock_sum} got {income_stock_usd}']
     if fees_stock_usd + negative_dividends != fees_sum:
         warnings += [f'Fees check failed. Expected: ${fees_sum} got {fees_stock_usd + negative_dividends}']
@@ -475,7 +475,7 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
         warnings += [f'Crypto check failed. Expected: ${crypto_sum} got {income_crypto_usd}']
     if fees_crypto_usd != Decimal('0'):
         warnings += [f'Crypto check failed. Expected: feed to be 0']
-    if refunds_sum != refunds_sum_usd:
+    if refunds_sum != Decimal('0'):
         warnings += [f'Incorrect refund sum. Expected ${refunds_sum} got ${refunds_sum_usd}']
     if interest_sum_usd != interest_sum:
         warnings += [f'Incorrect interest sum. Expected ${interest_sum} got ${interest_sum_usd}']
