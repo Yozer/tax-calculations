@@ -245,9 +245,9 @@ def read(path):
             if len(grouped_closed_positions[pos_id]) > 1:
                 raise Exception(f'More than one closed position for {pos_id}')
             if open_amount < 0:
+                raise Exception(f'Negative open_amount for position id {pos_id}')
+            if amount < 0 and not is_cfd: # your dumbass lost more than invested, leverage = bad
                 raise Exception(f'Negative amount for position id {pos_id}')
-            if amount < 0: # your dumbass lost more than invested, leverage = bad
-                print(f"Check the transaction with negative amount for position id {pos_id}")
 
             if parsed_asset_type == CryptoType:
                 trans['date'] = close_date
