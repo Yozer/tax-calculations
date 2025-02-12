@@ -14,8 +14,12 @@ trans_types_to_ignore = ['Interest','Fixed Term Interest', 'Unlocking Term Depos
 def calculate_tax():
     income = Decimal("0")
     cost = Decimal("0")
+    file_name = 'nexo.csv'
+    if not os.path.exists(file_name):
+        print(f'WARNING: Kraken {file_name} doesnt exist. Skipping')
+        return(None, None, None, None)
 
-    sheet = read_csv('nexo.csv')
+    sheet = read_csv(file_name)
     for row in sheet:
         if row['Date / Time (UTC)'] is None:
             continue
