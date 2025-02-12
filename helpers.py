@@ -33,8 +33,8 @@ def get_rate(currency, asOfDate: datetime):
 
     return rate
 
-def convert_rate(asOfDate, amount, currency) -> Decimal:
-    return amount if currency == 'PLN' else (get_rate(currency, asOfDate) * amount)
+def convert_rate(asOfDate, amount, currency, dec_places = None) -> Decimal:
+    return round(amount if currency == 'PLN' else (get_rate(currency, asOfDate) * amount), dec_places)
 
 def convert_sheet(sheet):
     sheet.calculate_dimension()

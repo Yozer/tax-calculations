@@ -339,7 +339,7 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
             dochod[country] = Decimal("0")
 
         if pos["type"] == FeeType:
-            rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD')
+            rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD', dec_places=2)
             fees_usd += pos["amount"]
             if rate_pln > 0:
                 # take positive fee for CFD and count it as interest profit
@@ -347,7 +347,7 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
             else:
                 koszty[country] += -rate_pln
         elif pos["type"] == CryptoType:
-            rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD')
+            rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD', dec_places=2)
             if rate_pln > 0:
                 # positive, we sold crypto we bought
                 przychod[country] += rate_pln
@@ -358,20 +358,20 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
             income_usd += pos["equity_change"]
         elif pos['type'] == StockType:
             if pos['is_cfd']:
-                profit_pln = convert_rate(pos["close_date"], pos["equity_change"], currency='USD')
+                profit_pln = convert_rate(pos["close_date"], pos["equity_change"], currency='USD', dec_places=2)
                 if profit_pln > 0:
                     przychod[country] += profit_pln
                 else:
                     koszty[country] += -profit_pln
             else:
-                open_rate_pln = convert_rate(pos["open_date"], pos["open_amount"], currency='USD')
-                close_rate_pln = convert_rate(pos["close_date"], pos["close_amount"], currency='USD')
+                open_rate_pln = convert_rate(pos["open_date"], pos["open_amount"], currency='USD', dec_places=2)
+                close_rate_pln = convert_rate(pos["close_date"], pos["close_amount"], currency='USD', dec_places=2)
                 koszty[country] += open_rate_pln
                 przychod[country] += close_rate_pln
 
             income_usd += pos["equity_change"]
         elif pos['type'] in [AdjustmentType, RefundType, IndexAdjustmentType]:
-            rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD')
+            rate_pln = convert_rate(pos["date"], pos["amount"], currency='USD', dec_places=2)
             if rate_pln > 0:
                 przychod[country] += rate_pln
             else:
@@ -389,7 +389,7 @@ def process_positions(input_positions, typ, unmatched_dividend_position_ids, tra
     for country in dochod.keys():
         dochod[country] = przychod[country] - koszty[country]
 
-    return (income_usd, fees_usd, przychod, koszty, dochod, round(negative_dividend_sum, 2), refunds_sum_usd, index_adjustment_sum_usd)
+    return (income_usd, fees_usd, przychod, koszty, dochod, negative_dividend_sum, refunds_sum_usd, index_adjustment_sum_usd)
 
 def process_dividends(incomes, dividend_taxes):
     dividends = [x for x in incomes if x["type"] in [DividendType, InterestType]]
@@ -410,9 +410,9 @@ def process_dividends(incomes, dividend_taxes):
 
         if dividend['type'] == InterestType:
             interest_sum_usd += total_usd
-            total_pln = convert_rate(dividend["date"], total_usd, currency='USD')
+            total_pln = convert_rate(dividend["date"], total_usd, currency='USD', dec_places=2)
             przychod_dywidendy += total_pln
-            podatek_nalezny_dywidendy += tax_rate * total_pln
+            podatek_nalezny_dywidendy += round(tax_rate * total_pln, 2)
             continue
         elif dividend['type'] != DividendType:
             raise Exception("unexpected dividend type")
@@ -435,14 +435,14 @@ def process_dividends(incomes, dividend_taxes):
         total_usd = dividend_tax["Withholding Tax Amount (USD)"] + dividend_tax["Net Dividend Received (USD)"]
         income_dividends_usd_brutto += total_usd
 
-        total_pln = convert_rate(dividend["date"], total_usd, currency='USD')
+        total_pln = convert_rate(dividend["date"], total_usd, currency='USD', dec_places=2)
         przychod_dywidendy += total_pln
-        podatek_zaplacony_dywidendy += witholding_tax_rate * total_pln
+        podatek_zaplacony_dywidendy += round(witholding_tax_rate * total_pln, 2)
 
         if tax_rate - witholding_tax_rate > 0:
-            podatek_nalezny_dywidendy += tax_rate * total_pln
+            podatek_nalezny_dywidendy += round(tax_rate * total_pln, 2)
         else:
-            podatek_nalezny_dywidendy += witholding_tax_rate * total_pln
+            podatek_nalezny_dywidendy += round(witholding_tax_rate * total_pln, 2)
 
     # validate
     if sum_from_dividend_taxes != income_dividends_usd:
@@ -453,9 +453,9 @@ def process_dividends(incomes, dividend_taxes):
     if len(dividend_taxes) != 0:
         raise Exception("Niewykorzystano wszystkich dywidend do rozdzielenia podatku!")
 
-    income_dividends_usd = round(income_dividends_usd, 2)
-    income_dividends_usd_brutto = round(income_dividends_usd_brutto, 4)
-    przychod_dywidendy = round(przychod_dywidendy, 4)
+    income_dividends_usd = income_dividends_usd
+    income_dividends_usd_brutto = income_dividends_usd_brutto
+    przychod_dywidendy = przychod_dywidendy
     podstawa_dywidendy = round(przychod_dywidendy)
     podatek_nalezny_dywidendy = round(podatek_nalezny_dywidendy)
     podatek_zaplacony_dywidendy = round(podatek_zaplacony_dywidendy)
@@ -516,7 +516,7 @@ print(f"Koszty $ za stocks: ${fees_stock_usd} (w tym negatywne dywidendy: ${nega
 print(f"Przychód w pln za stocks: {sum_dict(przychod_stock)} zł")
 print(f"Koszt w pln za stocks: {sum_dict(koszty_stock)} zł")
 print(f"Dochód w pln za stocks: {sum_dict(dochod_stock)} zł")
-print(f"Podatek: {max(round(sum_dict(dochod_stock) * tax_rate, 0), 0)} zł")
+print(f"Podatek: {max(round(sum_dict(dochod_stock) * tax_rate), 0)} zł")
 print(f'Dochód per kraj (zawiera tylko dodatnie): {dict([(x, str(y)) for x, y in dochod_stock.items() if y > 0])}')
 
 income_crypto_usd, fees_crypto_usd, przychod_crypto, koszty_crypto, dochod_crypto, _, _, _ = process_positions(entries, CryptoType, None, grouped_transactions, grouped_closed_positions, raw_dividends)
@@ -527,6 +527,6 @@ print(f"Koszty $ za crypto: ${fees_crypto_usd} (powinno być zawsze zero)")
 print(f"Przychód w pln za crypto: {sum_dict(przychod_crypto)} zł")
 print(f"Koszt w pln za crypto: {sum_dict(koszty_crypto)} zł")
 print(f"Dochód w pln za crypto: {sum_dict(dochod_crypto)} zł")
-print(f"Podatek: {max(round(sum_dict(dochod_crypto) * tax_rate, 0), 0)} zł")
+print(f"Podatek: {max(round(sum_dict(dochod_crypto) * tax_rate), 0)} zł")
 
 do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, negative_dividend_sum, income_crypto_usd, fees_crypto_usd, refunds_sum_usd, interest_sum_usd, index_adjustment_sum_usd)
