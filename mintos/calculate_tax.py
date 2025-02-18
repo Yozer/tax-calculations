@@ -7,7 +7,7 @@ from decimal import Decimal
 from helpers import convert_rate, convert_sheet
 import re
 
-income_types = ["Interest received", "Interest received from loan repurchase", "Late fees received", "Delayed interest income on transit rebuy", "Interest received from pending payments", 'Mintos Core fee',]
+income_types = ["Interest received", "Interest received from loan repurchase", "Late fees received", "Delayed interest income on transit rebuy", "Interest received from pending payments",]
 ignored_typed = [
     'Withdrawal', 
     'Principal received', 
@@ -15,7 +15,7 @@ ignored_typed = [
     'Principal received from repurchase of small loan parts', 
     'Secondary market transaction'
 ]
-cost_types = []
+cost_types = ['Mintos Core fee']
 witholding_tax = Decimal("0.05")
 polish_tax = Decimal("0.19")
 
@@ -73,8 +73,6 @@ def calculate_tax(path):
         if trans['type'] == 'profit':
             przychod += convert_rate(trans['date'], trans['amount'], trans['currency'], 2)
         elif trans['type'] == 'fee':
-            if trans['wth'] is not None:
-                raise Exception('{trans} feew with witholding tax??')
             cost += convert_rate(trans['date'], trans['amount'], trans['currency'], 2)
         else:
             raise Exception('wtf')
