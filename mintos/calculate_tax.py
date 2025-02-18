@@ -51,7 +51,7 @@ def process_transactions(path):
                 else:
                     trans_group.append({'isin_loan': isin_loan, 'type': 'profit', 'subtype': trans_type, 'date': date, 'amount': amount, 'currency': row['Currency']})
             elif trans_type == 'Tax withholding':
-                withloding_taxes += convert_rate(date, amount, row['Currency'])
+                withloding_taxes += convert_rate(date, amount, row['Currency'], 2)
             elif trans_type in cost_types:
                 trans_group.append({'isin_loan': isin_loan, 'type': 'fee', 'date': date, 'amount': amount, 'currency':  row['Currency']})
             elif trans_type in ignored_typed:
@@ -71,11 +71,11 @@ def calculate_tax(path):
     transactions, withloding_taxes = process_transactions(path)
     for trans in transactions:
         if trans['type'] == 'profit':
-            przychod += convert_rate(trans['date'], trans['amount'], trans['currency'])
+            przychod += convert_rate(trans['date'], trans['amount'], trans['currency'], 2)
         elif trans['type'] == 'fee':
             if trans['wth'] is not None:
                 raise Exception('{trans} feew with witholding tax??')
-            cost += convert_rate(trans['date'], trans['amount'], trans['currency'])
+            cost += convert_rate(trans['date'], trans['amount'], trans['currency'], 2)
         else:
             raise Exception('wtf')
 
