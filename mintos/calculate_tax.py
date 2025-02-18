@@ -7,8 +7,14 @@ from decimal import Decimal
 from helpers import convert_rate, convert_sheet
 import re
 
-income_types = ["Interest received", "Interest received from loan repurchase", "Late fees received", "Delayed interest income on transit rebuy", "Interest received from pending payments"]
-ignored_typed = ['Withdrawal', 'Principal received from loan repurchase', 'Principal received from repurchase of small loan parts']
+income_types = ["Interest received", "Interest received from loan repurchase", "Late fees received", "Delayed interest income on transit rebuy", "Interest received from pending payments", 'Mintos Core fee',]
+ignored_typed = [
+    'Withdrawal', 
+    'Principal received', 
+    'Principal received from loan repurchase', 
+    'Principal received from repurchase of small loan parts', 
+    'Secondary market transaction'
+]
 cost_types = []
 witholding_tax = Decimal("0.05")
 polish_tax = Decimal("0.19")
