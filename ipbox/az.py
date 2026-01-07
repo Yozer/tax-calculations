@@ -38,13 +38,39 @@ def get_my_prs_from_repo(repo: GitRepository, start_date, end_date):
                 break
 
             if heuristics_pr_filter_enabled:
-                probably_my_prs = [pr for pr in prs if any(reviewer.unique_name.lower() in git_authors for reviewer in pr.reviewers) or pr.created_by.unique_name.lower() in git_authors]
+                quick_filter_prs = [pr for pr in prs if any(reviewer.unique_name.lower() in git_authors for reviewer in pr.reviewers) or pr.created_by.unique_name.lower() in git_authors]
+                author_username = author.split('@')[0].lower()
+                author_full = author.lower()
+                
+                tag_filter_prs = []
+                for pr in prs:
+                    if pr not in quick_filter_prs:
+                        try:
+                            pr_labels = git_client.get_pull_request_labels(repo.id, pr.pull_request_id)
+                            if any(author_username in label.name.lower() or author_full in label.name.lower() for label in pr_labels if label.name):
+                                tag_filter_prs.append(pr)
+                        except:
+                            pass
+                
+                probably_my_prs = quick_filter_prs + tag_filter_prs
             else:
                 probably_my_prs = prs
             probably_my_prs = [pr for pr in prs if pr.closed_date >= start_date and pr.closed_date <= end_date]
             for pr in probably_my_prs:
                 pr.commits = [c for c in git_client.get_pull_request_commits(repo.id, pr.pull_request_id) if c.committer.email.lower() in git_authors or c.author.email.lower() in git_authors or c.committer.name.lower() in git_authors or c.author.name.lower() in git_authors]
-                if len(pr.commits) > 0:
+                
+                author_username = author.split('@')[0].lower()
+                author_full = author.lower()
+                
+                try:
+                    pr_labels = git_client.get_pull_request_labels(repo.id, pr.pull_request_id)
+                    email_in_tags = any(author_username in label.name.lower() or author_full in label.name.lower() for label in pr_labels if label.name)
+                except:
+                    email_in_tags = False
+                
+                has_commits = len(pr.commits) > 0
+                
+                if has_commits or email_in_tags:
                     pr.work_item_refs = [int(w.id) for w in git_client.get_pull_request_work_item_refs(repo.id, pr.pull_request_id)]
                     pr.repo = repo.name
                     yield pr
@@ -74,7 +100,7 @@ def get_work_items_batch(ids: List[str], end_date) -> Iterator[WorkItem]:
     for chunk in chunks(ids):
         request = WorkItemBatchGetRequest(error_policy="fail", ids=chunk, fields=["System.Id", "System.Title", "System.WorkItemType", "System.Description", "Microsoft.VSTS.TCM.ReproSteps", "System.Parent", "System.State", closed_date_field])
         for work in work_client.get_work_items_batch(request):
-            if work.fields["System.WorkItemType"] == "Task" and work.fields["System.Parent"] not in ids:
+            if work.fields["System.WorkItemType"] == "Task" and "System.Parent" in work.fields and work.fields["System.Parent"] not in ids:
                 missing_parents.append(work.fields["System.Parent"])
             cleanup_work(work)
             yield work
