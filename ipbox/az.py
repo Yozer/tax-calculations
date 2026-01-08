@@ -45,12 +45,9 @@ def get_my_prs_from_repo(repo: GitRepository, start_date, end_date):
                 tag_filter_prs = []
                 for pr in prs:
                     if pr not in quick_filter_prs:
-                        try:
-                            pr_labels = git_client.get_pull_request_labels(repo.id, pr.pull_request_id)
-                            if any(author_username in label.name.lower() or author_full in label.name.lower() for label in pr_labels if label.name):
-                                tag_filter_prs.append(pr)
-                        except:
-                            pass
+                        pr_labels = git_client.get_pull_request_labels(repo.id, pr.pull_request_id)
+                        if any(author_username in label.name.lower() or author_full in label.name.lower() for label in pr_labels if label.name):
+                            tag_filter_prs.append(pr)
                 
                 probably_my_prs = quick_filter_prs + tag_filter_prs
             else:
@@ -62,11 +59,8 @@ def get_my_prs_from_repo(repo: GitRepository, start_date, end_date):
                 author_username = author.split('@')[0].lower()
                 author_full = author.lower()
                 
-                try:
-                    pr_labels = git_client.get_pull_request_labels(repo.id, pr.pull_request_id)
-                    email_in_tags = any(author_username in label.name.lower() or author_full in label.name.lower() for label in pr_labels if label.name)
-                except:
-                    email_in_tags = False
+                pr_labels = git_client.get_pull_request_labels(repo.id, pr.pull_request_id)
+                email_in_tags = any(author_username in label.name.lower() or author_full in label.name.lower() for label in pr_labels if label.name)
                 
                 has_commits = len(pr.commits) > 0
                 
