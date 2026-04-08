@@ -19,8 +19,18 @@ git_client: GitClient = connection.clients_v6_0.get_git_client()
 work_client: WorkItemTrackingClient = connection.clients_v6_0.get_work_item_tracking_client()
 
 def get_my_prs_from_repos(start_date, end_date, project):
-    for repo in git_client.get_repositories(project):
-        yield from get_my_prs_from_repo(repo, start_date, end_date)
+    repos = git_client.get_repositories(project)
+    print(f"    Scanning {len(repos)} repos in {project}...")
+    for i, repo in enumerate(repos):
+        print(f"    [{i+1}/{len(repos)}] Repo: {repo.name}", end="", flush=True)
+        count = 0
+        for pr in get_my_prs_from_repo(repo, start_date, end_date):
+            count += 1
+            yield pr
+        if count > 0:
+            print(f" -> {count} PRs matched")
+        else:
+            print()
 
 
 def get_my_prs_from_repo(repo: GitRepository, start_date, end_date):
@@ -118,3 +128,7 @@ def get_my_work_items_ids(prs: List[GitPullRequest], start_date, end_date, proje
     ids = set([work_id for pr in prs for work_id in pr.work_item_refs])
     ids = ids.union(get_work_items_ids_assigned_to_me(start_date, end_date, project))
     return get_work_items_batch(list(ids), end_date)
+
+def get_work_items_assigned_to_me(start_date, end_date, project) -> Iterator[WorkItem]:
+    ids = get_work_items_ids_assigned_to_me(start_date, end_date, project)
+    return get_work_items_batch(ids, end_date)

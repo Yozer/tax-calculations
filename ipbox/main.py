@@ -9,8 +9,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, Fill
 import pytz
-from az import get_my_prs_from_repos, get_my_work_items_ids
-from settings import excel_path, year, from_month, to_month, projects
+from az import get_my_prs_from_repos, get_my_work_items_ids, get_work_items_assigned_to_me
+from settings import excel_path, year, from_month, to_month, projects, tasks_only
 import re
 
 insensitive = re.compile('fix:?', re.IGNORECASE)
@@ -38,6 +38,22 @@ def build_excel_models(all_work_items: List[WorkItem], prs: List[GitPullRequest]
             title = '; '.join(work_items)
 
         yield ExcelRow(pr.merge_id, obfuscate(title), obfuscate(pr.title), pr.closed_date, pr.url)
+
+def build_excel_models_from_tasks(work_items: List[WorkItem]) -> Iterable[ExcelRow]:
+
+    def obfuscate(title):
+        return insensitive.sub('', title).strip().strip(':').strip()
+
+    work_items.sort(key=lambda w: w.fields.get("Microsoft.VSTS.Common.ClosedDate", datetime.min))
+    for wi in work_items:
+        closed = wi.fields.get("Microsoft.VSTS.Common.ClosedDate", None)
+        yield ExcelRow(
+            merge_id=str(wi.id),
+            work_item_title=obfuscate(wi.fields.get("System.Title", "")),
+            pr_title="",
+            closed_date=closed,
+            pr_url=""
+        )
             
 def write_header(ws: Worksheet):
     header = ["PR Id", "Task title", "PR title", "Merged Date", "Time", "Pull Request"]
@@ -71,7 +87,7 @@ def write_excel(rows: Iterable[ExcelRow], month):
         ws.cell(row=row_id, column=1).value = row.merge_id
         ws.cell(row=row_id, column=2).value = row.work_item_title
         ws.cell(row=row_id, column=3).value = row.pr_title
-        ws.cell(row=row_id, column=4).value = row.closed_date.astimezone(pytz.timezone("Poland")).replace(tzinfo=None)
+        ws.cell(row=row_id, column=4).value = row.closed_date.astimezone(pytz.timezone("Poland")).replace(tzinfo=None) if row.closed_date else None
         ws.cell(row=row_id, column=5).value = 0
         ws.cell(row=row_id, column=6).value = row.pr_url
 
@@ -86,18 +102,28 @@ for month in range(from_month, to_month + 1):
         print(f"Sheet for month {month} already has values. Skipping")
         continue
 
+    print(f"[{month}/{to_month}] Processing {year}-{month:02d}...")
     start_date = datetime(year, month, 1, tzinfo=pytz.timezone("Poland"))
     end_date = start_date + relativedelta(months=1) - relativedelta(seconds=1)
 
     try:
         excel_models = []
         for project in projects:
-            prs = list(get_my_prs_from_repos(start_date, end_date, project))
-            work_items = list(get_my_work_items_ids(prs, start_date, end_date, project))
-            excel_models += build_excel_models(work_items, prs)
+            if tasks_only:
+                print(f"  [{month}/{to_month}] Project: {project} - fetching work items (tasks only)...")
+                work_items = list(get_work_items_assigned_to_me(start_date, end_date, project))
+                print(f"  [{month}/{to_month}] Project: {project} - found {len(work_items)} work items")
+                excel_models += build_excel_models_from_tasks(work_items)
+            else:
+                print(f"  [{month}/{to_month}] Project: {project} - fetching PRs...")
+                prs = list(get_my_prs_from_repos(start_date, end_date, project))
+                print(f"  [{month}/{to_month}] Project: {project} - found {len(prs)} PRs, fetching work items...")
+                work_items = list(get_my_work_items_ids(prs, start_date, end_date, project))
+                print(f"  [{month}/{to_month}] Project: {project} - found {len(work_items)} work items")
+                excel_models += build_excel_models(work_items, prs)
 
         write_excel(excel_models, month)
-        print(f"Created {month}")
+        print(f"[{month}/{to_month}] Done {year}-{month:02d} ({len(excel_models)} rows written)")
     except Exception:
-        print(f"Failed on month {month}")
+        print(f"[{month}/{to_month}] FAILED on {year}-{month:02d}")
         traceback.print_exc()
