@@ -8,4 +8,5 @@ to_month = 12
 
 heuristics_pr_filter_enabled = True # True speeds up script but might ommit PR with your commits but created by someone else
 projects = ["TTT"]
+tasks_only = False # if True, skips PR/commit scanning and only fetches work items assigned to you
 org_url = 'https://dev.azure.com/guestlinelabs'
