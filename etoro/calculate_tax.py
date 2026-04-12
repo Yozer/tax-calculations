@@ -266,7 +266,7 @@ def read(path):
                 trans['open_date'] = open_date
                 trans['close_date'] = close_date
             else:
-                raise Exception(r"Unexpected asset type '{parsed_asset_type}' for {pos_id}")
+                raise Exception(f"Unexpected asset type '{parsed_asset_type}' for {pos_id}")
 
             entries.append(trans)
 
@@ -443,7 +443,7 @@ def process_dividends(incomes, dividend_taxes):
 
         total_pln = convert_rate(dividend["date"], total_usd, currency='USD', dec_places=2)
         przychod_dywidendy += total_pln
-        podatek_zaplacony_dywidendy += round(witholding_tax_rate * total_pln, 2)
+        podatek_zaplacony_dywidendy += convert_rate(dividend["date"], dividend_tax["Withholding Tax Amount (USD)"], currency='USD', dec_places=2)
 
         if tax_rate - witholding_tax_rate > 0:
             podatek_nalezny_dywidendy += round(tax_rate * total_pln, 2)
@@ -481,7 +481,7 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
         warnings += [f'Crypto check failed. Expected: ${crypto_sum} got {income_crypto_usd}']
     if fees_crypto_usd != Decimal('0'):
         warnings += [f'Crypto check failed. Expected: feed to be 0']
-    if refunds_sum != Decimal('0'):
+    if refunds_sum_usd != refunds_sum:
         warnings += [f'Incorrect refund sum. Expected ${refunds_sum} got ${refunds_sum_usd}']
     if interest_sum_usd != interest_sum:
         warnings += [f'Incorrect interest sum. Expected ${interest_sum} got ${interest_sum_usd}']

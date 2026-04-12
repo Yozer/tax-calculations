@@ -33,7 +33,7 @@ class TestDoChecks:
             Decimal('30'),   # dividends_sum
             Decimal('-15'),  # fees_sum
             Decimal('5'),    # interest_sum
-            Decimal('0'),    # refunds_sum
+            Decimal('3'),    # refunds_sum
             Decimal('2'),    # index_adjustments_sum
         )
         ct.do_checks('test.xlsx',

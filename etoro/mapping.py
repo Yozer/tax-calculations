@@ -9,7 +9,7 @@ CfdCountry = 'Cypr'
 instruments_by_full_symbol = None
 instruments_by_display_name = None
 eur_exchange_suffixes = ['mi', 'pa']
-manual_mapping = {'UBSG/CHF': 'Szwajcaria', 'ANA/EUR': 'Hiszpania', 'LQDE/USD': 'Irlandia', 'IBE/EUR': 'Hiszpania'}
+manual_mapping = {'UBSG/CHF': 'Szwajcaria', 'ANA/EUR': 'Hiszpania', 'LQDE/USD': 'Irlandia', 'IBE/EUR': 'Hiszpania', 'IS04.DE/EUR': 'Irlandia', 'IUST.DE/EUR': 'Irlandia', 'XEON.DE/EUR': 'Irlandia', 'IEML/USD': 'Irlandia', 'META/USD': 'USA'}
 etoro_cache = {}
 
 def ask_etoro_cached(query, stock_symbol=None):
@@ -24,7 +24,14 @@ def ask_etoro_cached(query, stock_symbol=None):
     if r.status_code != 200:
         raise Exception('failed query!')
     result = r.json()['results'][0]['hits']
-    result_filtered = list([r['countryFull'] for r in result if r['name'].lower() == stock_symbol.lower() or r['symbolFull'].lower() == stock_symbol.lower()])
+    query_lower = query.lower()
+    query_no_ticker = re.sub(r'\s*\([^)]*\)\s*$', '', query_lower).strip()
+    result_filtered = list([r.get('countryFull', '') for r in result
+                            if (r['instrumentDisplayName'].lower() == stock_symbol.lower()
+                            or r['symbolFull'].lower() == stock_symbol.lower()
+                            or r['instrumentDisplayName'].lower() == query_lower
+                            or r['instrumentDisplayName'].lower() == query_no_ticker)
+                            and r.get('countryFull')])
     etoro_cache[query] = result_filtered
     return result_filtered
 
@@ -172,6 +179,7 @@ mapping = {
     'hongkong': 'Hong Kong',
     'helsinki': 'Finlandia',
     'borsaitaliana': 'Włochy',
+    'amsterdam': 'Holandia',
 
     'France': 'Francja',
     'Germany': 'Niemcy',
