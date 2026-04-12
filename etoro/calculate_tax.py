@@ -210,9 +210,12 @@ def read(path):
             entries.append(process_interest_payment(row))
         elif trans_type in ['Adjustment', 'Index price adjustment']:
             entries.append(process_adjustment(row))
-        elif trans_type in ['Withdraw Fee', 'Withdrawal Conversion Fee', 'Deposit Conversion Fee']:
+        elif trans_type in ['Withdraw Fee', 'Deposit Conversion Fee']:
             if amount != 0:
-                raise Exception(f'Unsupported withdraw fee/withdrawal conversion fee/depsit conversion fee {amount}')
+                raise Exception(f'Unsupported withdraw fee/deposit conversion fee {amount}')
+        elif trans_type == 'Withdrawal Conversion Fee':
+            if amount != 0:
+                entries.append({'id': pos_id, 'date': date, 'amount': amount, 'type': FeeType, 'is_cfd': True})
         elif trans_type == "Open Position":
             # skip as it's taxable only for crypto
             if get_asset_type(row) != CryptoType:
