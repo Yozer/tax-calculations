@@ -26,7 +26,7 @@ def create_test_workbook(account_activity_rows, closed_positions_rows,
 
     # Closed Positions sheet
     ws_cp = wb.create_sheet('Closed Positions')
-    cp_headers = ['Position ID', 'Action', 'Amount', 'Open Date', 'Close Date', 'Type']
+    cp_headers = ['Position ID', 'Action', 'Amount', 'Open Date', 'Close Date', 'Type', 'Leverage']
     ws_cp.append(cp_headers)
     for row in closed_positions_rows:
         ws_cp.append(row)
@@ -63,7 +63,7 @@ class TestRead:
                 ['100', 'Position closed', 150.0, '15/06/2025 10:00:00', 'AAPL/USD', 'Stocks', 50.0],
             ],
             closed_positions_rows=[
-                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
+                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
             ],
         )
         mock_lwb.return_value = wb
@@ -86,7 +86,7 @@ class TestRead:
                 ['200', 'Position closed', 600.0, '15/06/2025 10:00:00', 'BTC/USD', 'Crypto', 100.0],
             ],
             closed_positions_rows=[
-                ['200', 'Buy BTC', 500.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
+                ['200', 'Buy BTC', 500.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
             ],
         )
         mock_lwb.return_value = wb
@@ -108,7 +108,7 @@ class TestRead:
                 ['300', 'Position closed', -50.0, '15/06/2025 10:00:00', 'OIL/USD', 'CFD', -50.0],
             ],
             closed_positions_rows=[
-                ['300', 'Buy OIL', 200.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'CFD'],
+                ['300', 'Buy OIL', 200.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'CFD', 2],
             ],
         )
         mock_lwb.return_value = wb
@@ -392,7 +392,7 @@ class TestRead:
                 ['100', 'Position closed', 150.0, '15/06/2025 10:00:00', 'AAPL/USD', 'Stocks', 50.0],
             ],
             closed_positions_rows=[
-                ['100', 'Sell AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
+                ['100', 'Sell AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
             ],
         )
         mock_lwb.return_value = wb
@@ -406,7 +406,7 @@ class TestRead:
                 ['100', 'Position closed', -50.0, '15/06/2025 10:00:00', 'OIL', 'CFD', -50.0],
             ],
             closed_positions_rows=[
-                ['100', 'Sell OIL', 200.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'CFD'],
+                ['100', 'Sell OIL', 200.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'CFD', 5],
             ],
         )
         mock_lwb.return_value = wb
@@ -423,8 +423,8 @@ class TestRead:
                 ['100', 'Position closed', 150.0, '15/06/2025 10:00:00', 'AAPL/USD', 'Stocks', 50.0],
             ],
             closed_positions_rows=[
-                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
-                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
+                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
+                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
             ],
         )
         mock_lwb.return_value = wb
@@ -438,7 +438,7 @@ class TestRead:
                 ['100', 'Position closed', 150.0, '15/06/2025 10:00:00', 'AAPL/USD', 'Stocks', 50.0],
             ],
             closed_positions_rows=[
-                ['100', 'Buy AAPL', -100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
+                ['100', 'Buy AAPL', -100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
             ],
         )
         mock_lwb.return_value = wb
@@ -452,7 +452,7 @@ class TestRead:
                 ['100', 'Position closed', -10.0, '15/06/2025 10:00:00', 'AAPL/USD', 'Stocks', -10.0],
             ],
             closed_positions_rows=[
-                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
+                ['100', 'Buy AAPL', 100.0, '01/03/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
             ],
         )
         mock_lwb.return_value = wb
@@ -467,7 +467,7 @@ class TestRead:
             ],
             closed_positions_rows=[
                 # Thursday open, so T+2 = Monday
-                ['100', 'Buy AAPL', 100.0, '12/06/2025 10:00:00', '15/06/2025 10:00:00', 'Real'],
+                ['100', 'Buy AAPL', 100.0, '12/06/2025 10:00:00', '15/06/2025 10:00:00', 'Real', 1],
             ],
         )
         mock_lwb.return_value = wb

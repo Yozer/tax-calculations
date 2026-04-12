@@ -104,7 +104,7 @@ class TestDoChecks:
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
                      Decimal('0'), Decimal('0'), Decimal('0'), Decimal('5'), Decimal('0'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
-        assert 'Incorrect refund sum' in captured.out
+        assert 'Incorrect refund/adjustment sum' in captured.out
 
     @patch('calculate_tax.read_summary')
     def test_interest_check_fails(self, mock_rs, capsys):
