@@ -19,7 +19,7 @@ RefundType = 'refund'
 
 tax_rate = Decimal("0.19")
 use_t_plus_2 = False
-year = 2024
+year = 2025
 ignored_transactions = ['Deposit',
                         'Start Copy',
                         'Account balance to mirror',
@@ -491,7 +491,7 @@ def do_checks(fname, income_dividends_usd, income_stock_usd, fees_stock_usd, neg
     print("-------------------------IMPORTANT----------------------------")
     print()
 
-fname = 'statement_2024.xlsx'
+fname = f'statement_{year}.xlsx'
 entries, grouped_transactions, grouped_closed_positions = read(fname)
 dividend_taxes, raw_dividends = read_dividend_taxes(fname)
 
