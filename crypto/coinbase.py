@@ -42,10 +42,15 @@ def calculate_tax():
             raise Exception(f"Coinbase. Unknown price currency {price_currency}")
         
         if type == 'advanced trade buy':
-            koszt_total += total_pln
+            koszt_total += abs(total_pln)
         elif type == 'advanced trade sell':
-            przychod_total += total_pln
+            przychod_total += abs(total_pln)
         if asset not in ['USDC', 'USDT']:
             raise Exception(f"Coinbase. Unknown asset {asset}")
 
     return ("Coinbase", przychod_total, koszt_total, fiat_staking_total)
+
+if __name__ == "__main__":
+    result = calculate_tax()
+    if result is not None:
+        print(result)
