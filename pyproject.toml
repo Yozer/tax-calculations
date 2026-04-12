@@ -1,0 +1,18 @@
+[project]
+name = "kalkulatory"
+version = "0.1.0"
+description = "PIT tax calculators"
+requires-python = ">=3.10"
+dependencies = [
+    "azure-devops",
+    "msrest",
+    "openpyxl",
+    "python-dateutil",
+    "pytz",
+    "requests",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
