@@ -46,7 +46,7 @@ def convert_sheet(sheet):
 
 def read_csv(file_name):
     transactions = []
-    with open(file_name, 'r', encoding='utf-8') as f:
+    with open(file_name, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         for row in reader:
             transactions.append(row)
