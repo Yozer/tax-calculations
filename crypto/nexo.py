@@ -44,3 +44,8 @@ def calculate_tax():
                 raise Exception("invalid output currency")
 
     return ('Nexo', round(income, 2), round(cost, 2), Decimal("0"))
+
+if __name__ == "__main__":
+    result = calculate_tax()
+    if result is not None:
+        print(result)
