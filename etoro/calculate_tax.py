@@ -216,6 +216,9 @@ def read(path):
         elif trans_type == 'Withdrawal Conversion Fee':
             if amount != 0:
                 entries.append({'id': pos_id, 'date': date, 'amount': amount, 'type': FeeType, 'is_cfd': True})
+        elif trans_type == 'Commission':
+            if amount != 0:
+                entries.append({'id': pos_id, 'date': date, 'amount': amount, 'type': FeeType, 'is_cfd': is_asset_cfd(row)})
         elif trans_type == "Open Position":
             # skip as it's taxable only for crypto
             if get_asset_type(row) != CryptoType:

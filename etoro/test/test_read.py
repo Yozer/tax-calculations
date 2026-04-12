@@ -213,6 +213,52 @@ class TestRead:
         assert entries[0]['is_cfd'] is True
 
     @patch('calculate_tax.load_workbook')
+    def test_commission_nonzero_stocks(self, mock_lwb):
+        wb = create_test_workbook(
+            account_activity_rows=[
+                ['810', 'Commission', -1.5, '15/06/2025 10:00:00', '', 'Stocks', 0],
+            ],
+            closed_positions_rows=[],
+        )
+        mock_lwb.return_value = wb
+        with patch.object(ct, 'year', 2025):
+            entries, _, _ = ct.read('test.xlsx')
+
+        assert len(entries) == 1
+        assert entries[0]['type'] == ct.FeeType
+        assert entries[0]['amount'] == Decimal('-1.5')
+        assert entries[0]['is_cfd'] is False
+
+    @patch('calculate_tax.load_workbook')
+    def test_commission_nonzero_cfd(self, mock_lwb):
+        wb = create_test_workbook(
+            account_activity_rows=[
+                ['811', 'Commission', -2.0, '15/06/2025 10:00:00', '', 'CFD', 0],
+            ],
+            closed_positions_rows=[],
+        )
+        mock_lwb.return_value = wb
+        with patch.object(ct, 'year', 2025):
+            entries, _, _ = ct.read('test.xlsx')
+
+        assert len(entries) == 1
+        assert entries[0]['is_cfd'] is True
+
+    @patch('calculate_tax.load_workbook')
+    def test_commission_zero_skipped(self, mock_lwb):
+        wb = create_test_workbook(
+            account_activity_rows=[
+                ['812', 'Commission', 0, '15/06/2025 10:00:00', '', 'Stocks', 0],
+            ],
+            closed_positions_rows=[],
+        )
+        mock_lwb.return_value = wb
+        with patch.object(ct, 'year', 2025):
+            entries, _, _ = ct.read('test.xlsx')
+
+        assert len(entries) == 0
+
+    @patch('calculate_tax.load_workbook')
     def test_withdrawal_conversion_fee_zero_skipped(self, mock_lwb):
         wb = create_test_workbook(
             account_activity_rows=[
