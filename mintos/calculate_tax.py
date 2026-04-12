@@ -82,7 +82,7 @@ def calculate_tax(path):
     cost = round(cost, 2)
 
     dochod = przychod - cost
-    total_tax = round(polish_tax * przychod, 2)
+    total_tax = round(polish_tax * dochod, 2)
     tax_paid_abroad = -round(withloding_taxes, 2)
     tax_to_pay = total_tax - tax_paid_abroad
 
