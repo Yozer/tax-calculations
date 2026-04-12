@@ -45,4 +45,4 @@ nodeLanguageServer.*/**
 *.pdf
 *.xlsx
 *.csv
-ipbox/randomizer.py
+ipbox/randomizer
