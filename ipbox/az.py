@@ -34,6 +34,14 @@ def get_my_prs_from_repos(start_date, end_date, project):
 
 
 def get_my_prs_from_repo(repo: GitRepository, start_date, end_date):
+    def _matches_git_authors(commit) -> bool:
+        candidates = []
+        if commit and commit.committer:
+            candidates.extend([commit.committer.email, commit.committer.name])
+        if commit and commit.author:
+            candidates.extend([commit.author.email, commit.author.name])
+        return any((value or "").lower() in git_authors for value in candidates)
+
     params = GitPullRequestSearchCriteria(status="Completed", target_ref_name=repo.default_branch, include_links=True)
     skip = 0
     # print(f"Scanning repository: {repo.name}")
@@ -64,7 +72,7 @@ def get_my_prs_from_repo(repo: GitRepository, start_date, end_date):
                 probably_my_prs = prs
             probably_my_prs = [pr for pr in prs if pr.closed_date >= start_date and pr.closed_date <= end_date]
             for pr in probably_my_prs:
-                pr.commits = [c for c in git_client.get_pull_request_commits(repo.id, pr.pull_request_id) if c.committer.email.lower() in git_authors or c.author.email.lower() in git_authors or c.committer.name.lower() in git_authors or c.author.name.lower() in git_authors]
+                pr.commits = [c for c in git_client.get_pull_request_commits(repo.id, pr.pull_request_id) if _matches_git_authors(c)]
                 
                 author_username = author.split('@')[0].lower()
                 author_full = author.lower()
