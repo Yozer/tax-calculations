@@ -109,7 +109,7 @@ class TestProcessPositionsStockReal:
         pos = make_stock_position_real(open_amount='100', close_amount='150')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([pos], ct.StockType, None, transactions, {}, stub_dividends())
-        income_usd, fees_usd, przychod, koszty, dochod, neg_div, refunds, idx_adj = result
+        income_usd, fees_usd, przychod, koszty, dochod, neg_div, refunds, adjustments, idx_adj, platform_fees = result
 
         assert income_usd == Decimal('50')  # 150 - 100
         assert fees_usd == Decimal('0')
@@ -124,7 +124,7 @@ class TestProcessPositionsStockReal:
         pos = make_stock_position_real(open_amount='150', close_amount='100')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([pos], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, przychod, koszty, dochod, _, _, _ = result
+        _, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert przychod['USA'] == Decimal('400')  # 100 * 4
         assert koszty['USA'] == Decimal('600')    # 150 * 4
@@ -141,7 +141,7 @@ class TestProcessPositionsStockReal:
             '2': [{'Type': 'Position closed', 'Details': 'SAP/EUR'}],
         }
         result = ct.process_positions([pos1, pos2], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, przychod, koszty, dochod, _, _, _ = result
+        _, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert 'USA' in dochod
         assert 'Niemcy' in dochod
@@ -160,7 +160,7 @@ class TestProcessPositionsStockCFD:
         pos = make_stock_position_cfd(equity_change='25')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([pos], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, przychod, koszty, dochod, _, _, _ = result
+        _, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         # 25 * 4 = 100 PLN profit
         assert przychod[CfdCountry] == Decimal('100')
@@ -172,7 +172,7 @@ class TestProcessPositionsStockCFD:
         pos = make_stock_position_cfd(equity_change='-25')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([pos], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, przychod, koszty, dochod, _, _, _ = result
+        _, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert przychod[CfdCountry] == Decimal('0')
         assert koszty[CfdCountry] == Decimal('100')  # |-25 * 4|
@@ -190,7 +190,7 @@ class TestProcessPositionsCrypto:
         pos = make_crypto_position(amount='50', equity_change='10')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([pos], ct.CryptoType, None, transactions, {}, stub_dividends())
-        income_usd, _, przychod, koszty, dochod, _, _, _ = result
+        income_usd, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert income_usd == Decimal('10')
         assert przychod[CryptoCountry] == Decimal('200')  # 50 * 4
@@ -202,7 +202,7 @@ class TestProcessPositionsCrypto:
         pos = make_crypto_position(amount='-50', equity_change='0')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([pos], ct.CryptoType, None, transactions, {}, stub_dividends())
-        _, _, przychod, koszty, dochod, _, _, _ = result
+        _, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert przychod[CryptoCountry] == Decimal('0')
         assert koszty[CryptoCountry] == Decimal('200')  # |-50 * 4|
@@ -219,7 +219,7 @@ class TestProcessPositionsFees:
         fee = make_fee_position(amount='-5')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([fee], ct.StockType, None, transactions, {}, stub_dividends())
-        _, fees_usd, przychod, koszty, dochod, _, _, _ = result
+        _, fees_usd, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert fees_usd == Decimal('-5')
         assert koszty[CfdCountry] == Decimal('20')   # |-5 * 4|
@@ -231,7 +231,7 @@ class TestProcessPositionsFees:
         fee = make_fee_position(amount='3')
         transactions = stub_transactions(['1'])
         result = ct.process_positions([fee], ct.StockType, None, transactions, {}, stub_dividends())
-        _, fees_usd, przychod, koszty, _, _, _, _ = result
+        _, fees_usd, przychod, koszty, _, _, _, _, _, _ = result
 
         assert fees_usd == Decimal('3')
         assert przychod[CfdCountry] == Decimal('12')  # 3 * 4
@@ -249,10 +249,10 @@ class TestProcessPositionsAdjustments:
         adj = make_adjustment_position(amount='10', adj_type=ct.AdjustmentType)
         transactions = stub_transactions(['1'])
         result = ct.process_positions([adj], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, przychod, _, _, _, refunds, _ = result
+        _, _, przychod, _, _, _, _, adjustments, _, _ = result
 
         assert przychod[CfdCountry] == Decimal('40')
-        assert refunds == Decimal('10')
+        assert adjustments == Decimal('10')
 
     @patch('calculate_tax.get_country_code', return_value=CfdCountry)
     @patch('calculate_tax.convert_rate', side_effect=mock_convert_rate)
@@ -260,10 +260,10 @@ class TestProcessPositionsAdjustments:
         adj = make_adjustment_position(amount='-5', adj_type=ct.AdjustmentType)
         transactions = stub_transactions(['1'])
         result = ct.process_positions([adj], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, _, koszty, _, _, refunds, _ = result
+        _, _, _, koszty, _, _, _, adjustments, _, _ = result
 
         assert koszty[CfdCountry] == Decimal('20')
-        assert refunds == Decimal('-5')
+        assert adjustments == Decimal('-5')
 
     @patch('calculate_tax.get_country_code', return_value=CfdCountry)
     @patch('calculate_tax.convert_rate', side_effect=mock_convert_rate)
@@ -271,7 +271,7 @@ class TestProcessPositionsAdjustments:
         ref = make_adjustment_position(amount='7', adj_type=ct.RefundType)
         transactions = stub_transactions(['1'])
         result = ct.process_positions([ref], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, _, _, _, _, refunds, idx = result
+        _, _, _, _, _, _, refunds, _, idx, _ = result
 
         assert refunds == Decimal('7')
         assert idx == Decimal('0')
@@ -282,7 +282,7 @@ class TestProcessPositionsAdjustments:
         idx_adj = make_adjustment_position(amount='4', adj_type=ct.IndexAdjustmentType)
         transactions = stub_transactions(['1'])
         result = ct.process_positions([idx_adj], ct.StockType, None, transactions, {}, stub_dividends())
-        _, _, _, _, _, _, refunds, idx = result
+        _, _, _, _, _, _, refunds, _, idx, _ = result
 
         assert refunds == Decimal('0')
         assert idx == Decimal('4')
@@ -302,7 +302,7 @@ class TestProcessPositionsNegativeDividends:
         unmatched = {'1'}
 
         result = ct.process_positions([div], ct.StockType, unmatched, transactions, closed_positions, stub_dividends())
-        _, _, _, koszty, _, neg_div_sum, _, _ = result
+        _, _, _, koszty, _, neg_div_sum, _, _, _, _ = result
 
         assert neg_div_sum == Decimal('3')  # -(amount) = -(-3) = 3
         assert koszty['USA'] == Decimal('12')  # 3 * 4
@@ -315,7 +315,7 @@ class TestProcessPositionsNegativeDividends:
         unmatched = {'1'}
 
         result = ct.process_positions([div], ct.StockType, unmatched, transactions, {}, stub_dividends())
-        _, _, przychod, koszty, _, neg_div_sum, _, _ = result
+        _, _, przychod, koszty, _, neg_div_sum, _, _, _, _ = result
 
         # positive dividends are not converted to fees (only negative ones)
         assert neg_div_sum == Decimal('0')
@@ -340,7 +340,7 @@ class TestProcessPositionsEdgeCases:
     @patch('calculate_tax.convert_rate', side_effect=mock_convert_rate)
     def test_empty_positions(self, mock_cr):
         result = ct.process_positions([], ct.StockType, None, {}, {}, stub_dividends())
-        income, fees, przychod, koszty, dochod, neg_div, refunds, idx = result
+        income, fees, przychod, koszty, dochod, neg_div, refunds, adjustments, idx, platform_fees = result
         assert income == Decimal('0')
         assert fees == Decimal('0')
         assert przychod == {}
@@ -358,7 +358,7 @@ class TestProcessPositionsEdgeCases:
         transactions = stub_transactions(['1', '2', '3', '4', '5'])
         all_positions = [stock, fee, adj, refund, idx]
         result = ct.process_positions(all_positions, ct.StockType, None, transactions, {}, stub_dividends())
-        income_usd, fees_usd, przychod, koszty, dochod, _, _, _ = result
+        income_usd, fees_usd, przychod, koszty, dochod, _, _, _, _, _ = result
 
         # All 5 positions should be processed
         assert income_usd == Decimal('20')  # only stock contributes: 120-100
@@ -373,7 +373,7 @@ class TestProcessPositionsEdgeCases:
         transactions = stub_transactions(['1', '2'])
 
         result = ct.process_positions([crypto, fee], ct.CryptoType, None, transactions, {}, stub_dividends())
-        _, fees_usd, _, _, _, _, _, _ = result
+        _, fees_usd, _, _, _, _, _, _, _, _ = result
 
         # Fee should not be counted in crypto processing
         assert fees_usd == Decimal('0')

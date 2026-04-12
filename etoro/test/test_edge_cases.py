@@ -44,8 +44,10 @@ class TestDoChecks:
                       income_crypto_usd=Decimal('50'),
                       fees_crypto_usd=Decimal('0'),
                       refunds_sum_usd=Decimal('3'),
+                      adjustments_sum_usd=Decimal('3'),
                       interest_sum_usd=Decimal('5'),
-                      index_adjustments_sum_usd=Decimal('2'))
+                      index_adjustments_sum_usd=Decimal('2'),
+                      platform_fees_usd=Decimal('0'))
 
         captured = capsys.readouterr()
         assert 'Congratulations' in captured.out
@@ -55,7 +57,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('0'), Decimal('0'), Decimal('30'), Decimal('0'),
                                 Decimal('0'), Decimal('0'), Decimal('0'))
         ct.do_checks('test.xlsx', Decimal('25'), Decimal('0'), Decimal('0'), Decimal('0'),
-                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
+                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'Dividends check failed' in captured.out
 
@@ -64,7 +66,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('100'), Decimal('0'), Decimal('0'), Decimal('0'),
                                 Decimal('0'), Decimal('0'), Decimal('0'))
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('50'), Decimal('0'), Decimal('0'),
-                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
+                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'Stock check failed' in captured.out
 
@@ -73,7 +75,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('-20'),
                                 Decimal('0'), Decimal('0'), Decimal('0'))
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('0'), Decimal('-15'), Decimal('-3'),
-                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
+                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'Fees check failed' in captured.out
 
@@ -82,7 +84,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('0'), Decimal('50'), Decimal('0'), Decimal('0'),
                                 Decimal('0'), Decimal('0'), Decimal('0'))
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
-                     Decimal('40'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
+                     Decimal('40'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'Crypto check failed' in captured.out
 
@@ -91,7 +93,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
                                 Decimal('0'), Decimal('0'), Decimal('0'))
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
-                     Decimal('0'), Decimal('5'), Decimal('0'), Decimal('0'), Decimal('0'))
+                     Decimal('0'), Decimal('5'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'feed to be 0' in captured.out
 
@@ -100,7 +102,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
                                 Decimal('0'), Decimal('10'), Decimal('0'))
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
-                     Decimal('0'), Decimal('0'), Decimal('5'), Decimal('0'), Decimal('0'))
+                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('5'), Decimal('0'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'Incorrect refund sum' in captured.out
 
@@ -109,7 +111,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
                                 Decimal('10'), Decimal('0'), Decimal('0'))
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
-                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('5'), Decimal('0'))
+                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('5'), Decimal('0'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'Incorrect interest sum' in captured.out
 
@@ -118,7 +120,7 @@ class TestDoChecks:
         mock_rs.return_value = (Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
                                 Decimal('0'), Decimal('0'), Decimal('10'))
         ct.do_checks('test.xlsx', Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'),
-                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('5'))
+                     Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('0'), Decimal('5'), Decimal('0'))
         captured = capsys.readouterr()
         assert 'Incorrect index adjustment sum' in captured.out
 
@@ -135,7 +137,7 @@ class TestEdgeCases:
                'amount': Decimal('0'), 'date': datetime(2025, 6, 15)}
         transactions = {'1': [{'Type': 'Position closed', 'Details': 'TEST/USD'}]}
         result = ct.process_positions([fee], ct.StockType, None, transactions, {}, [])
-        _, fees_usd, przychod, koszty, dochod, _, _, _ = result
+        _, fees_usd, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert fees_usd == Decimal('0')
         assert przychod.get('USA', Decimal('0')) == Decimal('0')
@@ -154,7 +156,7 @@ class TestEdgeCases:
         }
         transactions = {'1': [{'Type': 'Position closed', 'Details': 'TEST/USD'}]}
         result = ct.process_positions([pos], ct.StockType, None, transactions, {}, [])
-        income_usd, _, przychod, koszty, dochod, _, _, _ = result
+        income_usd, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert income_usd == Decimal('500000')
         assert dochod['USA'] == Decimal('2000000')  # (1.5M - 1M) * 4
@@ -174,7 +176,7 @@ class TestEdgeCases:
             })
         transactions = {str(i): [{'Type': 'Position closed', 'Details': 'TEST/USD'}] for i in range(100)}
         result = ct.process_positions(positions, ct.StockType, None, transactions, {}, [])
-        _, fees_usd, przychod, koszty, dochod, _, _, _ = result
+        _, fees_usd, przychod, koszty, dochod, _, _, _, _, _ = result
 
         # sum of -50 to 49 = -50
         expected_sum = sum(range(-50, 50))
@@ -230,7 +232,7 @@ class TestEdgeCases:
         transactions = {'1': [{'Type': 'Position closed', 'Details': 'TEST/USD'}]}
 
         result = ct.process_positions([fee], ct.StockType, None, transactions, {}, [])
-        _, fees_usd, przychod, koszty, dochod, _, _, _ = result
+        _, fees_usd, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert fees_usd == Decimal('-10')
         # is_cfd=True causes get_ticker_country to return CfdCountry directly
@@ -258,7 +260,7 @@ class TestEdgeCases:
             '2': [{'Type': 'Position closed', 'Details': 'AAPL/USD'}],
         }
         result = ct.process_positions([cfd_pos, real_pos], ct.StockType, None, transactions, {}, [])
-        income_usd, _, przychod, koszty, dochod, _, _, _ = result
+        income_usd, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert income_usd == Decimal('70')  # 30 + 40
         assert przychod[CfdCountry] == Decimal('120')  # 30 * 4
@@ -300,7 +302,7 @@ class TestEdgeCases:
         }
         transactions = {'1': [{'Type': 'Position closed', 'Details': 'TEST/USD'}]}
         result = ct.process_positions([pos], ct.StockType, None, transactions, {}, [])
-        income_usd, _, przychod, koszty, dochod, _, _, _ = result
+        income_usd, _, przychod, koszty, dochod, _, _, _, _, _ = result
 
         assert income_usd == Decimal('0')
         assert dochod['USA'] == Decimal('0')
