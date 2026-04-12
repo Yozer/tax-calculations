@@ -303,7 +303,7 @@ def read_summary(path):
             refunds_sum += amount
         elif row['Name'] == 'Index adjustments':
             index_adjustments_sum += amount
-        elif row['Name'] in ['Total Return Swaps (Profit or Loss)', 'Income from Airdrops', 'Income from Staking', 'Income from Corporate Actions']:
+        elif row['Name'] in ['Total Return Swaps (Profit or Loss)', 'Income from Airdrops', 'Income from Staking', 'Income from Corporate Actions', 'Stocks Lending']:
             if amount != 0:
                 raise Exception(f'Unupported: non-zero value for {row["Name"]} in Financial Summary')
         elif row['Name'] in ['Spread fee on CFDs', 'Spread fee on crypto', 'Spread fee on Total Return Swaps (TRS)', 'Spread fee on stocks', 'Spread fee on ETFs']:
